@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface Message {
@@ -12,28 +12,48 @@ interface ToolEvent {
   output?: string
 }
 
-function App() {
+const SUGGESTIONS = [
+  'Read the main entry point of this project',
+  'Create a new Python module with a class',
+  'Find all TODO comments in the codebase',
+  'Run the test suite and fix any failures',
+]
+
+export default function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
-  const [sessionId, setSessionId] = useState('')
-  const [provider, setProvider] = useState('ollama')
-  const [model, setModel] = useState('codellama:13b')
-  const [apiKey, setApiKey] = useState('')
   const [connected, setConnected] = useState(false)
+  const [provider, setProvider] = useState('ollama')
+  const [model, setModel] = useState('qwen2.5:0.5b')
+  const [apiKey, setApiKey] = useState('')
   const wsRef = useRef<WebSocket | null>(null)
-  const chatEndRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const currentAssistant = useRef('')
+  const toolBuffer = useRef<ToolEvent[]>([])
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
 
   useEffect(() => {
     connectWebSocket()
     return () => wsRef.current?.close()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, toolEvents])
+    scrollToBottom()
+  }, [messages, toolEvents, scrollToBottom])
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + 'px'
+    }
+  }, [input])
 
   function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -42,21 +62,13 @@ function App() {
 
     ws.onopen = () => {
       setConnected(true)
-      ws.send(JSON.stringify({
-        type: 'config',
-        provider,
-        model,
-        api_key: apiKey,
-      }))
+      ws.send(JSON.stringify({ type: 'config', provider, model, api_key: apiKey }))
     }
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
 
-      if (data.type === 'session') {
-        setSessionId(data.session_id)
-        return
-      }
+      if (data.type === 'session') return
 
       if (data.type === 'content') {
         currentAssistant.current += data.text
@@ -64,47 +76,44 @@ function App() {
           const updated = [...prev]
           const last = updated[updated.length - 1]
           if (last && last.role === 'assistant') {
-            last.content = currentAssistant.current
+            updated[updated.length - 1] = { ...last, content: currentAssistant.current }
           } else {
             updated.push({ role: 'assistant', content: currentAssistant.current })
           }
-          return [...updated]
+          return updated
         })
         return
       }
 
       if (data.type === 'tool_start') {
-        setToolEvents(prev => [...prev, {
-          name: data.name,
-          arguments: data.arguments,
-        }])
+        const evt: ToolEvent = { name: data.name, arguments: data.arguments }
+        toolBuffer.current = [...toolBuffer.current, evt]
+        setToolEvents([...toolBuffer.current])
         return
       }
 
       if (data.type === 'tool_result') {
-        setToolEvents(prev => {
-          const updated = [...prev]
-          const last = updated[updated.length - 1]
-          if (last && last.name === data.name && !last.output) {
-            last.output = data.output
-          }
-          return [...updated]
-        })
+        const updated = [...toolBuffer.current]
+        const last = updated[updated.length - 1]
+        if (last && last.name === data.name && !last.output) {
+          last.output = data.output
+        }
+        toolBuffer.current = updated
+        setToolEvents([...updated])
         return
       }
 
       if (data.type === 'done') {
         setIsStreaming(false)
         currentAssistant.current = ''
+        toolBuffer.current = []
         return
       }
 
       if (data.type === 'error') {
         setIsStreaming(false)
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Error: ${data.message}`,
-        }])
+        currentAssistant.current = ''
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.message}` }])
         return
       }
     }
@@ -117,20 +126,20 @@ function App() {
     ws.onerror = () => setConnected(false)
   }
 
-  function sendMessage() {
-    if (!input.trim() || isStreaming || !wsRef.current) return
+  function sendMessage(text?: string) {
+    const msg = (text || input).trim()
+    if (!msg || isStreaming || !wsRef.current) return
 
-    const userMsg = input.trim()
     setInput('')
     setToolEvents([])
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }])
+    toolBuffer.current = []
+    setMessages(prev => [...prev, { role: 'user', content: msg }])
     setIsStreaming(true)
     currentAssistant.current = ''
 
-    wsRef.current.send(JSON.stringify({
-      type: 'chat',
-      message: userMsg,
-    }))
+    wsRef.current.send(JSON.stringify({ type: 'chat', message: msg }))
+
+    setTimeout(() => textareaRef.current?.focus(), 50)
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -140,107 +149,160 @@ function App() {
     }
   }
 
-  function newSession() {
+  function newChat() {
     setMessages([])
     setToolEvents([])
-    setSessionId('')
+    toolBuffer.current = []
     currentAssistant.current = ''
     wsRef.current?.send(JSON.stringify({ type: 'reset' }))
   }
 
-  function updateConfig() {
+  function applyConfig() {
     wsRef.current?.send(JSON.stringify({
-      type: 'config',
-      provider,
-      model,
-      api_key: apiKey,
-      session_id: sessionId,
+      type: 'config', provider, model, api_key: apiKey,
     }))
+  }
+
+  const toolIcon: Record<string, string> = {
+    read_file: '📄', write_file: '✏️', edit_file: '🔧',
+    run_shell: '⚡', grep: '🔍', glob: '📁',
   }
 
   return (
     <>
-      <div className="header">
-        <h1>SAB</h1>
-        <div className="status">{connected ? 'Connected' : 'Disconnected'}</div>
-      </div>
-
-      <div className="settings-bar">
-        <select value={provider} onChange={e => setProvider(e.target.value)}>
-          <option value="ollama">Ollama (Local)</option>
-          <option value="anthropic">Claude (API)</option>
-          <option value="openai">GPT (API)</option>
-        </select>
-        <input
-          type="text"
-          value={model}
-          onChange={e => setModel(e.target.value)}
-          placeholder="Model"
-          style={{ width: 200 }}
-        />
-        {(provider === 'anthropic' || provider === 'openai') && (
-          <input
-            type="password"
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            placeholder="API Key"
-            style={{ width: 220 }}
-          />
-        )}
-        <button onClick={updateConfig}>Apply</button>
-        <button onClick={newSession} style={{ background: 'var(--red)' }}>New Chat</button>
-      </div>
-
-      <div className="chat-area">
-        {messages.length === 0 && (
-          <div className="welcome">
-            <h2>SAB</h2>
-            <p>Open-source coding agent. Ask me to write code, fix bugs, search files, or run commands.</p>
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <div className="logo-icon">S</div>
+            <h1>SAB</h1>
+            <span className="version">v0.1</span>
           </div>
-        )}
+          <button className="new-chat-btn" onClick={newChat}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            New Chat
+          </button>
+        </div>
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`message ${msg.role}`}>
-            {msg.role === 'assistant' ? (
-              <ReactMarkdown>{msg.content}</ReactMarkdown>
-            ) : (
-              msg.content
-            )}
+        <div className="sidebar-section">
+          <div className="section-label">Model</div>
+
+          <div className="setting-group">
+            <label>Provider</label>
+            <select value={provider} onChange={e => setProvider(e.target.value)}>
+              <option value="ollama">Ollama (Local)</option>
+              <option value="anthropic">Claude (API)</option>
+              <option value="openai">GPT (API)</option>
+            </select>
           </div>
-        ))}
 
-        {toolEvents.map((tool, i) => (
-          <div key={`tool-${i}`} className="tool-message">
-            <div className="tool-name">{tool.name}()</div>
-            {tool.output && (
-              <div className="tool-output">{tool.output.slice(0, 500)}{tool.output.length > 500 ? '...' : ''}</div>
-            )}
+          <div className="setting-group">
+            <label>Model Name</label>
+            <input type="text" value={model} onChange={e => setModel(e.target.value)} />
           </div>
-        ))}
 
-        {isStreaming && (
-          <div className="typing">
-            <span></span><span></span><span></span>
+          {(provider === 'anthropic' || provider === 'openai') && (
+            <div className="setting-group">
+              <label>API Key</label>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="sk-..." />
+            </div>
+          )}
+
+          <button className="apply-btn" onClick={applyConfig}>Apply Model</button>
+        </div>
+
+        <div className="status-bar">
+          <div className={`status-dot ${connected ? '' : 'disconnected'}`} />
+          <span className="status-text">{connected ? 'Connected' : 'Reconnecting...'}</span>
+        </div>
+      </aside>
+
+      <main className="main">
+        <div className="chat-header">
+          <span className="chat-header-title">SAB</span>
+          <span className="chat-header-info">
+            {messages.length > 0 ? `${messages.length} messages` : 'Ready'}
+            {' · '}
+            {model}
+          </span>
+        </div>
+
+        <div className="messages">
+          {messages.length === 0 && (
+            <div className="welcome">
+              <div className="welcome-icon">S</div>
+              <h2>What can I help you with?</h2>
+              <p>I can read, write, and edit files. Run commands. Search code. All from your terminal.</p>
+              <div className="welcome-chips">
+                {SUGGESTIONS.map((s, i) => (
+                  <button key={i} className="chip" onClick={() => sendMessage(s)}>{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`msg msg-${msg.role}`}>
+              {msg.role === 'user' ? (
+                <div className="msg-bubble">{msg.content}</div>
+              ) : (
+                <>
+                  <div className="msg-label"><span className="dot" /> SAB</div>
+                  <div className="msg-content">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+
+          {toolEvents.map((tool, i) => (
+            <div key={`tool-${i}`} className="tool-event">
+              <div className="tool-badge">
+                <span className="tool-icon">{toolIcon[tool.name] || '⚙️'}</span>
+                {tool.name}()
+              </div>
+              {tool.output && (
+                <div className="tool-output-box">
+                  {tool.output.length > 400 ? tool.output.slice(0, 400) + '\n... (truncated)' : tool.output}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isStreaming && (
+            <div className="typing-indicator">
+              <div className="typing-dots">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="input-area">
+          <div className="input-wrapper">
+            <div className="input-box">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask SAB anything..."
+                rows={1}
+              />
+            </div>
+            <button className="send-btn" onClick={() => sendMessage()} disabled={isStreaming || !input.trim()}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
           </div>
-        )}
-
-        <div ref={chatEndRef} />
-      </div>
-
-      <div className="input-area">
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask SAB anything..."
-          rows={1}
-        />
-        <button onClick={sendMessage} disabled={isStreaming || !input.trim()}>
-          {isStreaming ? 'Working...' : 'Send'}
-        </button>
-      </div>
+        </div>
+      </main>
     </>
   )
 }
-
-export default App

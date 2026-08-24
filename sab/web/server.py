@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import uuid
+import traceback
 from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -35,13 +36,13 @@ sessions: dict[str, Agent] = {}
 class ChatRequest(BaseModel):
     message: str
     session_id: str = ""
-    model: str = "codellama:13b"
+    model: str = "qwen2.5:0.5b"
     provider: str = "ollama"
     api_key: str = ""
 
 
 class SessionConfig(BaseModel):
-    model: str = "codellama:13b"
+    model: str = "qwen2.5:0.5b"
     provider: str = "ollama"
     api_key: str = ""
     workspace: str = str(Path.cwd())
@@ -74,15 +75,9 @@ async def chat(request: ChatRequest):
         request.session_id,
         SessionConfig(model=request.model, provider=request.provider, api_key=request.api_key),
     )
-
     response = agent.run(request.message)
-
     agent.save_session(str(SESSIONS_DIR / session_id))
-
-    return JSONResponse({
-        "response": response,
-        "session_id": session_id,
-    })
+    return JSONResponse({"response": response, "session_id": session_id})
 
 
 @app.post("/api/session/new")
@@ -124,7 +119,7 @@ async def websocket_chat(websocket: WebSocket):
                 session_id, agent = get_or_create_agent(
                     msg.get("session_id", ""),
                     SessionConfig(
-                        model=msg.get("model", "codellama:13b"),
+                        model=msg.get("model", "qwen2.5:0.5b"),
                         provider=msg.get("provider", "ollama"),
                         api_key=msg.get("api_key", ""),
                         workspace=msg.get("workspace", str(Path.cwd())),
@@ -155,6 +150,8 @@ async def websocket_chat(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     except Exception as e:
+        tb = traceback.format_exc()
+        print(f"WebSocket error: {e}\n{tb}")
         try:
             await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
         except Exception:

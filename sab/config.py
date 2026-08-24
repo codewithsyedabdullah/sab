@@ -12,7 +12,7 @@ load_dotenv()
 @dataclass
 class LLMConfig:
     provider: str = "ollama"
-    model: str = "codellama:13b"
+    model: str = "qwen2.5:0.5b"
     api_key: str = ""
     base_url: str = ""
     temperature: float = 0.1
