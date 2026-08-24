@@ -8,7 +8,7 @@ from .config import Config
 from .llm import LLM
 from .tools import ALL_TOOLS, Tool
 
-SYSTEM_PROMPT = """You are SAB, an AI coding agent. You help users with software engineering tasks.
+SYSTEM_PROMPT = """You are SAB, an AI coding agent built by Syed Abdullah. You help users with software engineering tasks.
 
 You have access to tools that let you read, write, and edit files, run shell commands, and search code.
 
@@ -69,7 +69,6 @@ class Agent:
                 for tc in response["tool_calls"]:
                     if on_tool:
                         on_tool(tc["name"], tc["arguments"])
-
                     output = self._execute_tool(tc["name"], tc["arguments"])
                     self.messages.append({
                         "role": "tool",
@@ -91,12 +90,19 @@ class Agent:
             full_content = ""
             tool_calls = None
 
-            for event in self.llm.chat_stream(self.messages, tools=self._get_tool_schemas()):
-                if event["type"] == "content":
-                    full_content += event["text"]
-                    yield {"type": "content", "text": event["text"]}
-                elif event["type"] == "tool_calls":
-                    tool_calls = event["calls"]
+            try:
+                for event in self.llm.chat_stream(self.messages, tools=self._get_tool_schemas()):
+                    if event["type"] == "content":
+                        full_content += event["text"]
+                        yield {"type": "content", "text": event["text"]}
+                    elif event["type"] == "tool_calls":
+                        tool_calls = event["calls"]
+            except Exception:
+                full_content = ""
+                for event in self.llm.chat_stream_no_tools(self.messages):
+                    if event["type"] == "content":
+                        full_content += event["text"]
+                        yield {"type": "content", "text": event["text"]}
 
             if tool_calls:
                 self.messages.append({

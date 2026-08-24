@@ -44,7 +44,7 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         provider = os.getenv("SAB_PROVIDER", "ollama")
-        model = os.getenv("SAB_MODEL", "codellama:13b")
+        model = os.getenv("SAB_MODEL", "qwen2.5:0.5b")
         api_key = os.getenv("SAB_API_KEY", "")
         base_url = os.getenv("SAB_BASE_URL", "")
 

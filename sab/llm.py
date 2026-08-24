@@ -30,7 +30,7 @@ class LLM:
             self.model = self.config.model
 
     def chat(self, messages: list[dict[str, str]], tools: list[dict] | None = None) -> dict[str, Any]:
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": self.config.temperature,
@@ -59,7 +59,7 @@ class LLM:
     def chat_stream(
         self, messages: list[dict[str, str]], tools: list[dict] | None = None
     ) -> Generator[dict[str, Any], None, None]:
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": self.config.temperature,
@@ -111,3 +111,21 @@ class LLM:
                     "arguments": args,
                 })
             yield {"type": "tool_calls", "calls": calls}
+
+    def chat_stream_no_tools(
+        self, messages: list[dict[str, str]]
+    ) -> Generator[dict[str, Any], None, None]:
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "stream": True,
+        }
+
+        for chunk in litellm.completion(**kwargs):
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if not delta:
+                continue
+            if delta.content:
+                yield {"type": "content", "text": delta.content}
