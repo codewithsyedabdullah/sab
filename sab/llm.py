@@ -72,7 +72,7 @@ class LLM:
 
         tool_calls_buffer: dict[int, dict] = {}
 
-        for chunk in litellm.completion(**kwargs, stream=True):
+        for chunk in litellm.completion(**kwargs):
             delta = chunk.choices[0].delta if chunk.choices else None
             if not delta:
                 continue
