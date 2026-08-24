@@ -7,13 +7,16 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .agent import Agent
-from .config import Config
+from ..agent import Agent
+from ..config import Config
 
 app = FastAPI(title="SAB Agent", version="0.1.0")
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 app.add_middleware(
     CORSMiddleware,
@@ -156,6 +159,18 @@ async def websocket_chat(websocket: WebSocket):
             await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
         except Exception:
             pass
+
+
+@app.get("/")
+async def serve_index():
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return HTMLResponse("<h1>SAB Web UI</h1><p>Build the frontend: cd frontend && npm run build</p>")
+
+
+if STATIC_DIR.exists() and (STATIC_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
 
 def start_server(host: str = "0.0.0.0", port: int = 3000):
