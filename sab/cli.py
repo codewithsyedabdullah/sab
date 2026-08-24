@@ -122,6 +122,17 @@ def run(
 
 
 @app.command()
+def web(
+    host: str = typer.Option("0.0.0.0", "--host", help="Host to bind"),
+    port: int = typer.Option(3000, "--port", "-p", help="Port to listen on"),
+):
+    """Start the web UI server."""
+    from .web.server import start_server
+    console.print(f"[info]Starting SAB web server on http://localhost:{port}[/info]")
+    start_server(host=host, port=port)
+
+
+@app.command()
 def models():
     """List recommended models."""
     console.print(Panel.fit(
