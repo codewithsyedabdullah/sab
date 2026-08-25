@@ -2319,7 +2319,7 @@ import { loadPanel } from './panels.js';
           if (!document.querySelector('.agent-thinking-dots') && isStreaming) {
             _showThinkingSpinner(_thinkingLabel());
           }
-        }, 400);
+        }, 3000);
       }
       _cancelThinkingTimer = () => {
         if (_textPauseTimer) { clearTimeout(_textPauseTimer); _textPauseTimer = null; }
