@@ -31,10 +31,12 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const currentAssistant = useRef('')
-  const toolBuffer = useRef<ToolEvent[]>([])
+  const assistantText = useRef('')
+  const toolBuf = useRef<ToolEvent[]>([])
 
-  const scroll = useCallback(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [])
+  const scroll = useCallback(() => {
+    requestAnimationFrame(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }))
+  }, [])
 
   useEffect(() => {
     connectWs()
@@ -67,14 +69,15 @@ export default function App() {
       if (d.type === 'session') return
 
       if (d.type === 'content') {
-        currentAssistant.current += d.text
+        assistantText.current += d.text
+        const snapshot = assistantText.current
         setMessages(prev => {
           const m = [...prev]
           const last = m[m.length - 1]
-          if (last?.role === 'assistant') {
-            m[m.length - 1] = { ...last, content: currentAssistant.current }
+          if (last && last.role === 'assistant') {
+            m[m.length - 1] = { role: 'assistant', content: snapshot }
           } else {
-            m.push({ role: 'assistant', content: currentAssistant.current })
+            m.push({ role: 'assistant', content: snapshot })
           }
           return m
         })
@@ -82,31 +85,45 @@ export default function App() {
       }
 
       if (d.type === 'tool_start') {
-        toolBuffer.current = [...toolBuffer.current, { name: d.name, arguments: d.arguments }]
-        setToolEvents([...toolBuffer.current])
+        const evt: ToolEvent = { name: d.name, arguments: d.arguments, output: undefined }
+        toolBuf.current = [...toolBuf.current, evt]
+        setToolEvents([...toolBuf.current])
         return
       }
 
       if (d.type === 'tool_result') {
-        const u = [...toolBuffer.current]
-        const last = u[u.length - 1]
-        if (last?.name === d.name && !last.output) last.output = d.output
-        toolBuffer.current = u
-        setToolEvents([...u])
+        const buf = [...toolBuf.current]
+        for (let i = buf.length - 1; i >= 0; i--) {
+          if (buf[i].name === d.name && !buf[i].output) {
+            buf[i] = { ...buf[i], output: d.output }
+            break
+          }
+        }
+        toolBuf.current = buf
+        setToolEvents([...buf])
         return
       }
 
       if (d.type === 'done') {
         setIsStreaming(false)
-        currentAssistant.current = ''
-        toolBuffer.current = []
         return
       }
 
       if (d.type === 'error') {
         setIsStreaming(false)
-        currentAssistant.current = ''
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${d.message}` }])
+        const errText = d.message || 'Unknown error'
+        setMessages(prev => {
+          const m = [...prev]
+          const last = m[m.length - 1]
+          if (last && last.role === 'assistant' && last.content) {
+            m.push({ role: 'assistant', content: '**Error:** ' + errText })
+          } else if (last && last.role === 'assistant') {
+            m[m.length - 1] = { role: 'assistant', content: '**Error:** ' + errText }
+          } else {
+            m.push({ role: 'assistant', content: '**Error:** ' + errText })
+          }
+          return m
+        })
         return
       }
     }
@@ -120,10 +137,10 @@ export default function App() {
     if (!msg || isStreaming || !wsRef.current) return
     setInput('')
     setToolEvents([])
-    toolBuffer.current = []
+    toolBuf.current = []
+    assistantText.current = ''
     setMessages(p => [...p, { role: 'user', content: msg }])
     setIsStreaming(true)
-    currentAssistant.current = ''
     wsRef.current.send(JSON.stringify({ type: 'chat', message: msg }))
     setTimeout(() => textareaRef.current?.focus(), 50)
   }
@@ -135,8 +152,9 @@ export default function App() {
   function newChat() {
     setMessages([])
     setToolEvents([])
-    toolBuffer.current = []
-    currentAssistant.current = ''
+    toolBuf.current = []
+    assistantText.current = ''
+    setIsStreaming(false)
     wsRef.current?.send(JSON.stringify({ type: 'reset' }))
   }
 
@@ -228,7 +246,7 @@ export default function App() {
                 <>
                   <div className="msg-label"><span className="dot" /> SAB</div>
                   <div className="msg-content">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown>{msg.content || ' '}</ReactMarkdown>
                   </div>
                 </>
               )}
