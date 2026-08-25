@@ -38,6 +38,8 @@ class Agent:
         self.messages = [{"role": "system", "content": system}]
 
     def _get_tool_schemas(self) -> list[dict]:
+        if not self.config.agent.use_tools:
+            return []
         return [t.to_schema() for t in self.tools.values()]
 
     def _execute_tool(self, name: str, arguments: dict) -> str:
@@ -53,8 +55,10 @@ class Agent:
     def run(self, user_message: str, on_thinking: Any = None, on_tool: Any = None) -> str:
         self.messages.append({"role": "user", "content": user_message})
 
+        tool_schemas = self._get_tool_schemas()
+
         for iteration in range(self.config.agent.max_iterations):
-            response = self.llm.chat(self.messages, tools=self._get_tool_schemas())
+            response = self.llm.chat(self.messages, tools=tool_schemas or None)
 
             if response.get("tool_calls"):
                 self.messages.append({
@@ -86,23 +90,18 @@ class Agent:
         """Yield events: content chunks, tool calls, tool results."""
         self.messages.append({"role": "user", "content": user_message})
 
+        tool_schemas = self._get_tool_schemas()
+
         for iteration in range(self.config.agent.max_iterations):
             full_content = ""
             tool_calls = None
 
-            try:
-                for event in self.llm.chat_stream(self.messages, tools=self._get_tool_schemas()):
-                    if event["type"] == "content":
-                        full_content += event["text"]
-                        yield {"type": "content", "text": event["text"]}
-                    elif event["type"] == "tool_calls":
-                        tool_calls = event["calls"]
-            except Exception:
-                full_content = ""
-                for event in self.llm.chat_stream_no_tools(self.messages):
-                    if event["type"] == "content":
-                        full_content += event["text"]
-                        yield {"type": "content", "text": event["text"]}
+            for event in self.llm.chat_stream(self.messages, tools=tool_schemas or None):
+                if event["type"] == "content":
+                    full_content += event["text"]
+                    yield {"type": "content", "text": event["text"]}
+                elif event["type"] == "tool_calls":
+                    tool_calls = event["calls"]
 
             if tool_calls:
                 self.messages.append({

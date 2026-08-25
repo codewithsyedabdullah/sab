@@ -23,6 +23,7 @@ class LLMConfig:
 class AgentConfig:
     max_iterations: int = 50
     max_file_size: int = 1_000_000
+    use_tools: bool = False
     allowed_extensions: list[str] = field(default_factory=lambda: [
         ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css",
         ".json", ".yaml", ".yml", ".toml", ".md", ".txt",

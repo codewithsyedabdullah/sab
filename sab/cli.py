@@ -45,7 +45,7 @@ def handle_tool(name: str, args: dict):
 
 @app.command()
 def chat(
-    model: str = typer.Option("codellama:13b", "--model", "-m", help="LLM model name"),
+    model: str = typer.Option("qwen2.5:0.5b", "--model", "-m", help="LLM model name"),
     provider: str = typer.Option("ollama", "--provider", "-p", help="LLM provider (ollama/anthropic/openai)"),
     workspace: str = typer.Option(".", "--workspace", "-w", help="Working directory"),
     api_key: str = typer.Option("", "--api-key", help="API key (for anthropic/openai)"),
@@ -97,7 +97,7 @@ def chat(
 @app.command()
 def run(
     prompt: str = typer.Argument(..., help="The task to execute"),
-    model: str = typer.Option("codellama:13b", "--model", "-m"),
+    model: str = typer.Option("qwen2.5:0.5b", "--model", "-m"),
     provider: str = typer.Option("ollama", "--provider", "-p"),
     workspace: str = typer.Option(".", "--workspace", "-w"),
     api_key: str = typer.Option("", "--api-key"),
