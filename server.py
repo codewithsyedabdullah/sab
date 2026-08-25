@@ -225,7 +225,7 @@ async def default_chat():
 async def models():
     try:
         import requests as _req
-        r = _req.get("http://localhost:11434/api/tags", timeout=3)
+        r = await asyncio.to_thread(lambda: _req.get("http://localhost:11434/api/tags", timeout=3))
         if r.ok:
             data = r.json().get("models", [])
             return {"items": [{"id": "sab-local", "name": "Ollama Local", "models": [{"id": m["name"], "name": m["name"], "provider": "ollama"} for m in data]}]}
@@ -300,7 +300,7 @@ async def probe_endpoint(id: str):
 async def probe_local():
     try:
         import requests as _req
-        r = _req.get("http://localhost:11434/api/tags", timeout=3)
+        r = await asyncio.to_thread(lambda: _req.get("http://localhost:11434/api/tags", timeout=3))
         return {"ok": r.ok, "models": [m["name"] for m in r.json().get("models", [])]}
     except Exception:
         return {"ok": False, "error": "Ollama not reachable"}
@@ -1466,6 +1466,246 @@ async def research_library():
     return []
 
 
+# ──────────────────── HARDWARE DETECTION ────────────────────
+
+def _detect_hardware_sync() -> dict:
+    gpu_count = 0
+    gpu_name = "None"
+    gpu_vram_gb = 0.0
+    gpu_error = None
+    gpu_groups = []
+    gpus = []
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,name,memory.total,memory.free", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            for line in result.stdout.strip().split("\n"):
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) >= 4:
+                    idx, name, total_mb, free_mb = int(parts[0]), parts[1], float(parts[2]), float(parts[3])
+                    gpus.append({"index": idx, "name": name, "vram_gb": round(total_mb / 1024, 1)})
+                    gpu_count += 1
+                    gpu_name = name
+                    gpu_vram_gb = round(total_mb / 1024, 1)
+            if gpus:
+                gpu_groups = [{"name": gpu_name, "count": gpu_count, "vram_each": gpu_vram_gb, "vram_total": round(gpu_vram_gb * gpu_count, 1), "indices": list(range(gpu_count))}]
+        else:
+            gpu_error = result.stderr.strip() or "nvidia-smi returned non-zero"
+    except FileNotFoundError:
+        gpu_error = "nvidia-smi not found"
+    except Exception as e:
+        gpu_error = str(e)
+
+    total_ram_gb = 0.0
+    available_ram_gb = 0.0
+    cpu_cores = os.cpu_count() or 1
+    cpu_name = "Unknown CPU"
+
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(["wmic", "os", "get", "TotalVisibleMemorySize,FreePhysicalMemory", "/format:csv"],
+                                    capture_output=True, text=True, timeout=5)
+            for line in result.stdout.strip().split("\n"):
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) >= 3 and parts[0] and parts[0] != "Node":
+                    try:
+                        free_kb = int(parts[1])
+                        total_kb = int(parts[2])
+                        total_ram_gb = round(total_kb / (1024 * 1024), 1)
+                        available_ram_gb = round(free_kb / (1024 * 1024), 1)
+                        break
+                    except (ValueError, IndexError):
+                        pass
+        except Exception:
+            total_ram_gb = 8.0
+        try:
+            result = subprocess.run(["wmic", "cpu", "get", "Name"], capture_output=True, text=True, timeout=5)
+            for line in result.stdout.strip().split("\n"):
+                line = line.strip()
+                if line and line != "Name":
+                    cpu_name = line
+                    break
+        except Exception:
+            pass
+    else:
+        try:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal"):
+                        total_ram_gb = round(int(line.split()[1]) / (1024 * 1024), 1)
+                    elif line.startswith("MemAvailable"):
+                        available_ram_gb = round(int(line.split()[1]) / (1024 * 1024), 1)
+        except Exception:
+            total_ram_gb = 8.0
+
+    has_gpu = gpu_count > 0
+    backend = "cuda" if has_gpu else "cpu"
+    if sys.platform == "darwin":
+        backend = "mps"
+        has_gpu = True
+        gpu_name = "Apple Silicon"
+
+    return {
+        "backend": backend,
+        "has_gpu": has_gpu,
+        "gpu_name": gpu_name,
+        "gpu_count": gpu_count,
+        "detected_gpu_count": gpu_count,
+        "gpu_vram_gb": gpu_vram_gb,
+        "gpu_groups": gpu_groups,
+        "gpus": gpus,
+        "total_ram_gb": total_ram_gb,
+        "available_ram_gb": available_ram_gb,
+        "cpu_cores": cpu_cores,
+        "cpu_name": cpu_name,
+        "platform": sys.platform,
+        "unified_memory": sys.platform == "darwin",
+        "gpu_error": gpu_error,
+        "manual_hardware": False,
+        "hardware_visibility_warning": None,
+        "probe_scope": "local",
+        "containerized": False,
+        "active_group": None,
+    }
+
+
+_hw_cache: dict | None = None
+
+
+async def _detect_hardware() -> dict:
+    global _hw_cache
+    if _hw_cache is None:
+        _hw_cache = await asyncio.to_thread(_detect_hardware_sync)
+    return _hw_cache
+
+
+# Popular models catalog for ranking against hardware
+_MODEL_CATALOG = [
+    {"name": "qwen2.5:0.5b", "repo_id": "qwen2.5:0.5b", "params_b": 0.5, "required_gb": 0.4, "context": 32768, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 45},
+    {"name": "qwen2.5:1.5b", "repo_id": "qwen2.5:1.5b", "params_b": 1.5, "required_gb": 1.0, "context": 32768, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 30},
+    {"name": "qwen2.5:3b", "repo_id": "qwen2.5:3b", "params_b": 3.0, "required_gb": 2.0, "context": 32768, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 22},
+    {"name": "qwen2.5:7b", "repo_id": "qwen2.5:7b", "params_b": 7.0, "required_gb": 4.5, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 15},
+    {"name": "qwen2.5:14b", "repo_id": "qwen2.5:14b", "params_b": 14.0, "required_gb": 9.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 8},
+    {"name": "qwen2.5:32b", "repo_id": "qwen2.5:32b", "params_b": 32.0, "required_gb": 20.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 4},
+    {"name": "qwen2.5:72b", "repo_id": "qwen2.5:72b", "params_b": 72.0, "required_gb": 44.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 1.5},
+    {"name": "llama3.2:1b", "repo_id": "llama3.2:1b", "params_b": 1.0, "required_gb": 0.7, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 35},
+    {"name": "llama3.2:3b", "repo_id": "llama3.2:3b", "params_b": 3.0, "required_gb": 2.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-09", "speed_tps_base": 22},
+    {"name": "llama3.1:8b", "repo_id": "llama3.1:8b", "params_b": 8.0, "required_gb": 5.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-07", "speed_tps_base": 14},
+    {"name": "llama3.1:70b", "repo_id": "llama3.1:70b", "params_b": 70.0, "required_gb": 42.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-07", "speed_tps_base": 1.5},
+    {"name": "gemma2:2b", "repo_id": "gemma2:2b", "params_b": 2.0, "required_gb": 1.5, "context": 8192, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-06", "speed_tps_base": 28},
+    {"name": "gemma2:9b", "repo_id": "gemma2:9b", "params_b": 9.0, "required_gb": 6.0, "context": 8192, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-06", "speed_tps_base": 12},
+    {"name": "phi3.5:3.8b", "repo_id": "phi3.5:3.8b", "params_b": 3.8, "required_gb": 2.5, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-08", "speed_tps_base": 20},
+    {"name": "mistral:7b", "repo_id": "mistral:7b", "params_b": 7.0, "required_gb": 4.5, "context": 32768, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-02", "speed_tps_base": 15},
+    {"name": "codellama:7b", "repo_id": "codellama:7b", "params_b": 7.0, "required_gb": 4.5, "context": 16384, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-01", "speed_tps_base": 14},
+    {"name": "codellama:13b", "repo_id": "codellama:13b", "params_b": 13.0, "required_gb": 8.5, "context": 16384, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-01", "speed_tps_base": 8},
+    {"name": "deepseek-coder-v2:16b", "repo_id": "deepseek-coder-v2:16b", "params_b": 16.0, "required_gb": 10.0, "context": 128000, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-06", "speed_tps_base": 7},
+    {"name": "phi4:14b", "repo_id": "phi4:14b", "params_b": 14.0, "required_gb": 9.0, "context": 16384, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-12", "speed_tps_base": 8},
+    {"name": "gemma3:4b", "repo_id": "gemma3:4b", "params_b": 4.0, "required_gb": 3.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2025-03", "speed_tps_base": 18},
+    {"name": "gemma3:12b", "repo_id": "gemma3:12b", "params_b": 12.0, "required_gb": 8.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2025-03", "speed_tps_base": 9},
+    {"name": "gemma3:27b", "repo_id": "gemma3:27b", "params_b": 27.0, "required_gb": 17.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2025-03", "speed_tps_base": 4},
+    {"name": "llama4-scout", "repo_id": "llama4-scout", "params_b": 109.0, "required_gb": 66.0, "context": 131072, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2025-04", "speed_tps_base": 0.8},
+    {"name": "command-r:35b", "repo_id": "command-r:35b", "params_b": 35.0, "required_gb": 22.0, "context": 128000, "quant": "Q4_K_M", "is_gguf": True, "backend": "ollama", "release_date": "2024-04", "speed_tps_base": 3.5},
+    {"name": "nomic-embed-text", "repo_id": "nomic-embed-text", "params_b": 0.14, "required_gb": 0.3, "context": 2048, "quant": "F16", "is_gguf": True, "backend": "ollama", "release_date": "2024-03", "speed_tps_base": 80},
+]
+
+
+def _rank_models(hw: dict, limit: int = 2500, quant_filter: str = "", ctx_filter: int = 0) -> list[dict]:
+    total_ram = hw.get("total_ram_gb", 8.0)
+    available = hw.get("available_ram_gb", total_ram * 0.85)
+    has_gpu = hw.get("has_gpu", False)
+    gpu_vram = hw.get("gpu_vram_gb", 0)
+    backend = hw.get("backend", "cpu")
+    cpu_cores = hw.get("cpu_cores", 4)
+
+    models = []
+    for m in _MODEL_CATALOG:
+        if quant_filter and quant_filter.lower() not in m["quant"].lower():
+            continue
+        if ctx_filter and m["context"] < ctx_filter:
+            continue
+
+        required = m["required_gb"]
+        params_b = m["params_b"]
+
+        if has_gpu and gpu_vram > 0:
+            if required <= gpu_vram * 0.85:
+                fit = "perfect"
+                score = 95
+                run_mode = "gpu"
+            elif required <= gpu_vram * 1.1:
+                fit = "good"
+                score = 80
+                run_mode = "gpu"
+            elif required <= gpu_vram * 1.3:
+                fit = "marginal"
+                score = 60
+                run_mode = "gpu"
+            elif required <= gpu_vram * 1.5:
+                fit = "too_tight"
+                score = 40
+                run_mode = "cpu"
+            else:
+                fit = "no_fit"
+                score = 10
+                run_mode = "cpu"
+        else:
+            usable_ram = total_ram * 0.75
+            if required <= usable_ram * 0.5:
+                fit = "perfect"
+                score = 90
+            elif required <= usable_ram * 0.75:
+                fit = "good"
+                score = 75
+            elif required <= usable_ram * 0.9:
+                fit = "marginal"
+                score = 55
+            elif required <= usable_ram:
+                fit = "too_tight"
+                score = 35
+            else:
+                fit = "no_fit"
+                score = 10
+            run_mode = "cpu"
+
+        if fit == "no_fit" and required > total_ram:
+            continue
+
+        speed = m["speed_tps_base"]
+        if run_mode == "gpu" and has_gpu:
+            speed = round(speed * (1 + gpu_vram / 24), 1)
+        elif run_mode == "cpu":
+            speed = round(speed * (cpu_cores / 8) * 0.6, 1)
+
+        if params_b <= 3:
+            score += 5
+        elif params_b <= 7:
+            score += 3
+
+        score = min(99, max(1, score))
+
+        models.append({
+            "name": m["name"], "repo_id": m["repo_id"],
+            "quant": m["quant"], "parameter_count": f"{params_b}B" if params_b >= 1 else f"{int(params_b*1000)}M",
+            "params_b": params_b, "required_gb": required,
+            "fit_level": fit, "score": score, "speed_tps": speed,
+            "context": m["context"], "context_length": m["context"],
+            "release_date": m["release_date"],
+            "run_mode": run_mode, "is_gguf": m["is_gguf"],
+            "is_moe": False, "is_image_gen": False,
+            "backend": m["backend"], "quant_repo": "", "provider": "",
+            "gguf_sources": [{"repo": m["repo_id"]}],
+            "gguf_files": [], "path": "", "id": m["repo_id"],
+            "source": "", "endpoint_kind": "", "_tag": "",
+            "mlx_only": False, "apple_ok": False,
+        })
+
+    models.sort(key=lambda x: (-x["score"], x["name"]))
+    return models[:limit]
+
+
 # ──────────────────── COOKBOOK ────────────────────
 
 @app.get("/api/cookbook/packages")
@@ -1479,24 +1719,26 @@ async def cookbook_packages():
 
 @app.get("/api/cookbook/gpus")
 async def cookbook_gpus():
-    gpus = []
-    try:
-        result = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            for line in result.stdout.strip().split("\n"):
-                parts = [p.strip() for p in line.split(",")]
-                if len(parts) >= 3:
-                    gpus.append({"name": parts[0], "vram_total_mb": int(parts[1]), "vram_free_mb": int(parts[2])})
-    except Exception:
-        pass
-    return {"ok": True, "gpus": gpus, "count": len(gpus)}
+    hw = await _detect_hardware()
+    return {"ok": True, "gpus": hw.get("gpus", []), "count": hw.get("gpu_count", 0)}
 
 
 @app.get("/api/cookbook/state")
 async def cookbook_state():
+    hw = await _detect_hardware()
     return _load_json(COOKBOOK_STATE_FILE, {
-        "env": {"python": f"{sys.version_info.major}.{sys.version_info.minor}", "platform": sys.platform, "has_gpu": False},
-        "tasks": [], "removedTasks": [], "presets": {},
+        "env": {
+            "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+            "platform": sys.platform,
+            "has_gpu": hw["has_gpu"],
+            "gpus": hw["gpu_name"],
+            "remoteHost": "",
+            "platform": sys.platform,
+            "hostPlatform": sys.platform,
+            "defaultServer": "",
+            "servers": [{"host": "", "name": "Local", "port": "22", "env": "none", "envPath": "", "platform": sys.platform, "color": "#bd93f9", "modelDirs": [], "downloadDir": ""}],
+        },
+        "tasks": [], "removedTasks": {}, "presets": [],
         "serveState": {"running": False}, "serveFavorites": [],
     })
 
@@ -1557,38 +1799,21 @@ async def cookbook_setup(request: Request):
 
 @app.get("/api/cookbook/ollama/library")
 async def ollama_library():
-    try:
-        import requests as _req
-        r = _req.get("https://ollama.com/library", timeout=10)
-        return {"models": [{"name": "qwen2.5:0.5b", "sizes": ["0.5B"], "description": "Small Qwen model"}]}
-    except Exception:
-        return {"models": [{"name": "qwen2.5:0.5b", "sizes": ["0.5B"], "description": "Small Qwen model"}]}
+    models = [{"name": m["name"].split(":")[0], "sizes": [], "description": m["name"]} for m in _MODEL_CATALOG]
+    seen = set()
+    unique = []
+    for m in models:
+        if m["name"] not in seen:
+            seen.add(m["name"])
+            unique.append(m)
+    return {"models": unique}
 
 
 # ──────────────────── HWFIT ────────────────────
 
 @app.get("/api/hwfit/system")
 async def hwfit_system():
-    ram_gb = 0
-    try:
-        import psutil
-        ram_gb = psutil.virtual_memory().total / (1024**3)
-    except Exception:
-        try:
-            result = subprocess.run(["wmic", "memorychip", "get", "Capacity"], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                for line in result.stdout.strip().split("\n"):
-                    line = line.strip()
-                    if line.isdigit():
-                        ram_gb += int(line) / (1024**3)
-        except Exception:
-            ram_gb = 8.0
-    return {
-        "gpu_count": 0, "detected_gpu_count": 0, "gpu_vram_gb": 0,
-        "total_ram_gb": round(ram_gb, 1), "has_gpu": False,
-        "platform": sys.platform, "backend": "cpu", "unified_memory": False,
-        "gpu_groups": [], "gpu_name": "None",
-    }
+    return await _detect_hardware()
 
 
 @app.get("/api/hwfit/profiles")
@@ -1597,8 +1822,30 @@ async def hwfit_profiles():
 
 
 @app.get("/api/hwfit/models")
-async def hwfit_models():
-    return {"system": await hwfit_system(), "models": []}
+async def hwfit_models(
+    limit: int = 2500, sort: str = "score", fresh: str = "",
+    quant: str = "", ctx: int = 0, use_case: str = "",
+    host: str = "", search: str = "",
+):
+    hw = await _detect_hardware()
+    models = _rank_models(hw, limit=limit, quant_filter=quant, ctx_filter=ctx)
+    if search:
+        search_l = search.lower()
+        models = [m for m in models if search_l in m["name"].lower() or search_l in m.get("repo_id", "").lower()]
+    if sort == "fit":
+        fit_order = {"perfect": 0, "good": 1, "marginal": 2, "too_tight": 3, "no_fit": 4}
+        models.sort(key=lambda m: (fit_order.get(m["fit_level"], 5), -m["score"]))
+    elif sort == "speed":
+        models.sort(key=lambda m: -m["speed_tps"])
+    elif sort == "params":
+        models.sort(key=lambda m: -m["params_b"])
+    elif sort == "vram":
+        models.sort(key=lambda m: -m["required_gb"])
+    elif sort == "newest":
+        models.sort(key=lambda m: m.get("release_date", ""), reverse=True)
+    else:
+        models.sort(key=lambda m: -m["score"])
+    return {"system": hw, "models": models, "error": None}
 
 
 # ──────────────────── MODEL DOWNLOAD / SERVE ────────────────────
@@ -1625,7 +1872,7 @@ async def model_cached():
     models = []
     try:
         import requests as _req
-        r = _req.get("http://localhost:11434/api/tags", timeout=3)
+        r = await asyncio.to_thread(lambda: _req.get("http://localhost:11434/api/tags", timeout=3))
         if r.ok:
             for m in r.json().get("models", []):
                 models.append({"repo_id": m["name"], "status": "ready", "has_incomplete": False})
@@ -1641,7 +1888,7 @@ async def shell_exec(request: Request):
     body = await request.json()
     cmd = body.get("command", "echo hello")
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=str(DATA_DIR.parent))
+        result = await asyncio.to_thread(lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=str(DATA_DIR.parent)))
         return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
     except subprocess.TimeoutExpired:
         return {"stdout": "", "stderr": "Command timed out", "returncode": -1}
