@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 import uvicorn
@@ -663,7 +663,17 @@ async def auto_sort_get():
     return sessions
 
 
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+@app.get("/")
+async def root():
+    return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/login")
+async def login_page():
+    return FileResponse(str(STATIC_DIR / "login.html"))
+
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 if __name__ == "__main__":

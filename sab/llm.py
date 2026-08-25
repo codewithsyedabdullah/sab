@@ -3,55 +3,58 @@ from __future__ import annotations
 import json
 from typing import Any, Generator
 
-import litellm
+import requests
 
 from .config import LLMConfig
 
-litellm.drop_params = True
+OLLAMA_DEFAULT = "http://localhost:11434"
 
 
 class LLM:
     def __init__(self, config: LLMConfig):
         self.config = config
-        self._configure()
+        self._api_base = config.base_url or OLLAMA_DEFAULT
 
-    def _configure(self):
-        if self.config.provider == "ollama":
-            self.model = f"ollama/{self.config.model}"
-            if self.config.base_url:
-                litellm.api_base = self.config.base_url
-        elif self.config.provider == "anthropic":
-            self.model = f"anthropic/{self.config.model}"
-            litellm.api_key = self.config.api_key
-        elif self.config.provider == "openai":
-            self.model = f"openai/{self.config.model}"
-            litellm.api_key = self.config.api_key
-        else:
-            self.model = self.config.model
-
-    def chat(self, messages: list[dict[str, str]], tools: list[dict] | None = None) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {
-            "model": self.model,
+    def _messages_payload(self, messages: list[dict[str, str]], tools: list[dict] | None = None) -> dict:
+        payload: dict[str, Any] = {
+            "model": self.config.model,
             "messages": messages,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
+            "stream": True,
+            "options": {
+                "temperature": self.config.temperature,
+                "num_predict": self.config.max_tokens,
+            },
         }
         if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
+            payload["tools"] = tools
+        return payload
 
-        response = litellm.completion(**kwargs)
-        choice = response.choices[0]
+    def chat(self, messages: list[dict[str, str]], tools: list[dict] | None = None) -> dict[str, Any]:
+        payload = self._messages_payload(messages, tools)
+        payload["stream"] = False
 
-        result: dict[str, Any] = {"content": choice.message.content or ""}
+        resp = requests.post(f"{self._api_base}/api/chat", json=payload, timeout=300)
+        resp.raise_for_status()
+        data = resp.json()
 
-        if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
+        msg = data.get("message", {})
+        result: dict[str, Any] = {"content": msg.get("content", "")}
+
+        tool_calls_raw = msg.get("tool_calls")
+        if tool_calls_raw:
             result["tool_calls"] = []
-            for tc in choice.message.tool_calls:
+            for tc in tool_calls_raw:
+                fn = tc.get("function", {})
+                args = fn.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
                 result["tool_calls"].append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "arguments": json.loads(tc.function.arguments),
+                    "id": f"call_{id(tc)}",
+                    "name": fn.get("name", ""),
+                    "arguments": args,
                 })
 
         return result
@@ -59,73 +62,56 @@ class LLM:
     def chat_stream(
         self, messages: list[dict[str, str]], tools: list[dict] | None = None
     ) -> Generator[dict[str, Any], None, None]:
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-            "stream": True,
-        }
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
+        payload = self._messages_payload(messages, tools)
+
+        resp = requests.post(
+            f"{self._api_base}/api/chat", json=payload, stream=True, timeout=300
+        )
+        resp.raise_for_status()
 
         tool_calls_buffer: dict[int, dict] = {}
 
-        for chunk in litellm.completion(**kwargs):
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if not delta:
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            try:
+                chunk = json.loads(line)
+            except json.JSONDecodeError:
                 continue
 
-            if delta.content:
-                yield {"type": "content", "text": delta.content}
+            msg = chunk.get("message", {})
+            content = msg.get("content", "")
+            if content:
+                yield {"type": "content", "text": content}
 
-            if hasattr(delta, "tool_calls") and delta.tool_calls:
-                for tc_delta in delta.tool_calls:
-                    idx = tc_delta.index
-                    if idx not in tool_calls_buffer:
-                        tool_calls_buffer[idx] = {
-                            "id": tc_delta.id or "",
-                            "name": "",
-                            "arguments": "",
-                        }
-                    if tc_delta.id:
-                        tool_calls_buffer[idx]["id"] = tc_delta.id
-                    if tc_delta.function:
-                        if tc_delta.function.name:
-                            tool_calls_buffer[idx]["name"] = tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            tool_calls_buffer[idx]["arguments"] += tc_delta.function.arguments
+            ollama_tool_calls = msg.get("tool_calls")
+            if ollama_tool_calls:
+                for tc in ollama_tool_calls:
+                    fn = tc.get("function", {})
+                    name = fn.get("name", "")
+                    args = fn.get("arguments", {})
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {}
+                    idx = len(tool_calls_buffer)
+                    tool_calls_buffer[idx] = {
+                        "id": f"call_{idx}",
+                        "name": name,
+                        "arguments": args,
+                    }
+
+            if chunk.get("done"):
+                break
 
         if tool_calls_buffer:
             calls = []
             for idx in sorted(tool_calls_buffer.keys()):
-                tc = tool_calls_buffer[idx]
-                try:
-                    args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-                except json.JSONDecodeError:
-                    args = {}
-                calls.append({
-                    "id": tc["id"],
-                    "name": tc["name"],
-                    "arguments": args,
-                })
+                calls.append(tool_calls_buffer[idx])
             yield {"type": "tool_calls", "calls": calls}
 
     def chat_stream_no_tools(
         self, messages: list[dict[str, str]]
     ) -> Generator[dict[str, Any], None, None]:
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-            "stream": True,
-        }
-
-        for chunk in litellm.completion(**kwargs):
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if not delta:
-                continue
-            if delta.content:
-                yield {"type": "content", "text": delta.content}
+        yield from self.chat_stream(messages, tools=None)
