@@ -228,10 +228,28 @@ async def models():
         r = await asyncio.to_thread(lambda: _req.get("http://localhost:11434/api/tags", timeout=3))
         if r.ok:
             data = r.json().get("models", [])
-            return {"items": [{"id": "sab-local", "name": "Ollama Local", "models": [{"id": m["name"], "name": m["name"], "provider": "ollama"} for m in data]}]}
+            return {"items": [{
+                "id": "sab-local",
+                "name": "Ollama Local",
+                "url": "http://localhost:11434",
+                "endpoint_id": "sab-local",
+                "endpoint_name": "Ollama Local",
+                "endpoint_url": "http://localhost:11434",
+                "models": [m["name"] for m in data],
+                "models_display": [m["name"] for m in data],
+            }]}
     except Exception:
         pass
-    return {"items": [{"id": "sab-local", "name": "SAB Local", "models": [{"id": config.llm.model, "name": config.llm.model, "provider": config.llm.provider}]}]}
+    return {"items": [{
+        "id": "sab-local",
+        "name": "SAB Local",
+        "url": "http://localhost:11434",
+        "endpoint_id": "sab-local",
+        "endpoint_name": "SAB Local",
+        "endpoint_url": "http://localhost:11434",
+        "models": [config.llm.model],
+        "models_display": [config.llm.model],
+    }]}
 
 
 @app.get("/api/providers")
@@ -243,7 +261,17 @@ async def providers():
 async def model_endpoints():
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
     if not endpoints:
-        endpoints = [{"id": "sab-local", "base_url": "http://localhost:11434", "models": [{"id": config.llm.model, "name": config.llm.model}], "pinned_models": [], "offline": False}]
+        endpoints = [{
+            "id": "sab-local",
+            "name": "Ollama Local",
+            "base_url": "http://localhost:11434",
+            "url": "http://localhost:11434",
+            "models": [{"id": config.llm.model, "name": config.llm.model}],
+            "models_list": [config.llm.model],
+            "pinned_models": [],
+            "offline": False,
+            "type": "ollama",
+        }]
     return endpoints
 
 
@@ -2265,7 +2293,9 @@ async def root():
 
 @app.get("/login")
 async def login_page():
-    return FileResponse(str(STATIC_DIR / "login.html"))
+    html = (STATIC_DIR / "login.html").read_text(encoding="utf-8")
+    html = html.replace("{{CSP_NONCE}}", "")
+    return HTMLResponse(html)
 
 
 # ──────────────────── STATIC MOUNT (must be last) ────────────────────
