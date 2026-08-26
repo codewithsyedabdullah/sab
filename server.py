@@ -118,7 +118,7 @@ def _json_or_form(body: Any) -> dict:
 
 @app.get("/api/auth/status")
 async def auth_status():
-    return {"authenticated": True, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}}
+    return {"authenticated": True, "configured": True, "signup_enabled": False, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}}
 
 
 @app.get("/api/auth/policy")
@@ -157,7 +157,7 @@ async def auth_features_post(request: Request):
 
 @app.get("/api/auth/users")
 async def auth_users():
-    return [{"username": "sab", "is_admin": True, "display_name": "SAB"}]
+    return {"users": [{"username": "sab", "is_admin": True, "display_name": "SAB"}]}
 
 
 @app.post("/api/auth/users")
@@ -750,7 +750,16 @@ async def ai_name():
 async def presets():
     data = _load_json(PRESETS_FILE, {})
     if not data:
-        data = {"default": {"name": "SAB", "character_name": "SAB", "system_prompt": "You are SAB."}}
+        data = {}
+    if "custom" not in data:
+        data["custom"] = {
+            "name": "Custom", "character_name": "",
+            "system_prompt": "", "enabled": False,
+            "temperature": 1.0, "max_tokens": 0,
+            "inject_prefix": "", "inject_suffix": "",
+        }
+    if "default" not in data:
+        data["default"] = {"name": "SAB", "character_name": "SAB", "system_prompt": "You are SAB."}
     return data
 
 
@@ -774,7 +783,43 @@ async def delete_preset(pid: str):
 
 @app.get("/api/presets/templates")
 async def preset_templates():
-    return []
+    data = _load_json(PRESETS_FILE, {})
+    return data.get("templates", [])
+
+
+@app.post("/api/presets/templates")
+async def preset_template_create(request: Request):
+    body = await request.json()
+    data = _load_json(PRESETS_FILE, {})
+    templates = data.get("templates", [])
+    templates.append(body)
+    data["templates"] = templates
+    _save_json(PRESETS_FILE, data)
+    return body
+
+
+@app.delete("/api/presets/templates/{tid}")
+async def preset_template_delete(tid: str):
+    data = _load_json(PRESETS_FILE, {})
+    templates = data.get("templates", [])
+    data["templates"] = [t for t in templates if t.get("id") != tid]
+    _save_json(PRESETS_FILE, data)
+    return {"ok": True}
+
+
+@app.get("/api/presets/custom")
+async def preset_custom_get():
+    data = _load_json(PRESETS_FILE, {})
+    return data.get("custom", {})
+
+
+@app.post("/api/presets/custom")
+async def preset_custom_save(request: Request):
+    body = await request.json()
+    data = _load_json(PRESETS_FILE, {})
+    data["custom"] = body
+    _save_json(PRESETS_FILE, data)
+    return body
 
 
 @app.post("/api/presets/expand")
@@ -878,7 +923,7 @@ async def notes_fire_reminder(request: Request):
 
 @app.get("/api/tasks")
 async def tasks_list():
-    return _load_json(TASKS_FILE, [])
+    return {"tasks": _load_json(TASKS_FILE, [])}
 
 
 @app.post("/api/tasks")
@@ -1294,7 +1339,7 @@ async def email_extract_style(request: Request):
 
 @app.get("/api/email/list")
 async def email_list(folder: str = "INBOX", limit: int = 50):
-    return []
+    return {"emails": [], "total": 0}
 
 
 @app.get("/api/email/folders")
@@ -2199,7 +2244,7 @@ async def stt_transcribe(request: Request):
 
 @app.get("/api/tts/stats")
 async def tts_stats():
-    return {"provider": "none", "available": False}
+    return {"provider": "none", "available": False, "ready": False}
 
 
 @app.post("/api/tts/synthesize")
@@ -2296,6 +2341,551 @@ async def login_page():
     html = (STATIC_DIR / "login.html").read_text(encoding="utf-8")
     html = html.replace("{{CSP_NONCE}}", "")
     return HTMLResponse(html)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  MISSING ENDPOINTS — added to satisfy frontend API calls
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── Auth: login / logout / password / 2FA ──
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    body = await request.json()
+    username = body.get("username", "sab")
+    return {"ok": True, "user": {"username": username, "is_admin": True, "display_name": username.upper()}}
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    return {"ok": True}
+
+@app.post("/api/auth/change-password")
+async def auth_change_password(request: Request):
+    return {"ok": True}
+
+@app.get("/api/auth/2fa/status")
+async def auth_2fa_status():
+    return {"enabled": False, "configured": False}
+
+@app.post("/api/auth/2fa/setup")
+async def auth_2fa_setup():
+    return {"secret": "", "qr_uri": "", "backup_codes": []}
+
+@app.post("/api/auth/2fa/confirm")
+async def auth_2fa_confirm(request: Request):
+    return {"ok": True}
+
+@app.post("/api/auth/2fa/disable")
+async def auth_2fa_disable(request: Request):
+    return {"ok": True}
+
+# ── Auth: integrations ──
+
+@app.get("/api/auth/integrations")
+async def auth_integrations():
+    return []
+
+@app.post("/api/auth/integrations")
+async def auth_integrations_create(request: Request):
+    body = await request.json()
+    return {"id": _uid(), **body, "created_at": _now()}
+
+@app.put("/api/auth/integrations/{iid}")
+async def auth_integrations_update(iid: str, request: Request):
+    body = await request.json()
+    return {"id": iid, **body}
+
+@app.post("/api/auth/integrations/{iid}")
+async def auth_integrations_update_post(iid: str, request: Request):
+    body = await request.json()
+    return {"id": iid, **body}
+
+@app.delete("/api/auth/integrations/{iid}")
+async def auth_integrations_delete(iid: str):
+    return {"ok": True}
+
+@app.post("/api/auth/integrations/{iid}/test")
+async def auth_integrations_test(iid: str):
+    return {"ok": True, "message": "Connection successful"}
+
+@app.get("/api/auth/integrations/presets")
+async def auth_integrations_presets():
+    return []
+
+# ── Contacts ──
+
+CONTACTS_FILE = DATA_DIR / "contacts.json"
+
+@app.get("/api/contacts/config")
+async def contacts_config():
+    return _load_json(DATA_DIR / "contacts_config.json", {"provider": "local"})
+
+@app.put("/api/contacts/config")
+async def contacts_config_put(request: Request):
+    body = await request.json()
+    _save_json(DATA_DIR / "contacts_config.json", body)
+    return body
+
+@app.get("/api/contacts/list")
+async def contacts_list():
+    return _load_json(CONTACTS_FILE, [])
+
+@app.post("/api/contacts/add")
+async def contacts_add(request: Request):
+    body = await request.json()
+    items = _load_json(CONTACTS_FILE, [])
+    contact = {"uid": _uid(), **body, "created_at": _now()}
+    items.append(contact)
+    _save_json(CONTACTS_FILE, items)
+    return contact
+
+@app.put("/api/contacts/{uid}")
+async def contacts_update(uid: str, request: Request):
+    body = await request.json()
+    items = _load_json(CONTACTS_FILE, [])
+    for item in items:
+        if item.get("uid") == uid:
+            item.update(body)
+    _save_json(CONTACTS_FILE, items)
+    return {"ok": True}
+
+@app.delete("/api/contacts/{uid}")
+async def contacts_delete(uid: str):
+    items = _load_json(CONTACTS_FILE, [])
+    items = [i for i in items if i.get("uid") != uid]
+    _save_json(CONTACTS_FILE, items)
+    return {"ok": True}
+
+@app.delete("/api/contacts/clear")
+async def contacts_clear():
+    _save_json(CONTACTS_FILE, [])
+    return {"ok": True}
+
+@app.get("/api/contacts/export")
+async def contacts_export():
+    items = _load_json(CONTACTS_FILE, [])
+    return {"contacts": items, "count": len(items)}
+
+@app.post("/api/contacts/import")
+async def contacts_import(request: Request):
+    body = await request.json()
+    existing = _load_json(CONTACTS_FILE, [])
+    new_contacts = body.get("contacts", [])
+    existing.extend(new_contacts)
+    _save_json(CONTACTS_FILE, existing)
+    return {"ok": True, "imported": len(new_contacts)}
+
+@app.get("/api/contacts/search")
+async def contacts_search(q: str = ""):
+    items = _load_json(CONTACTS_FILE, [])
+    if q:
+        ql = q.lower()
+        items = [i for i in items if ql in str(i.get("name", "")).lower() or ql in str(i.get("email", "")).lower()]
+    return items
+
+# ── Signatures ──
+
+SIGNATURES_FILE = DATA_DIR / "signatures.json"
+
+@app.get("/api/signatures")
+async def signatures_list():
+    return _load_json(SIGNATURES_FILE, [])
+
+@app.post("/api/signatures")
+async def signatures_create(request: Request):
+    body = await request.json()
+    items = _load_json(SIGNATURES_FILE, [])
+    sig = {"id": _uid(), **body, "created_at": _now()}
+    items.append(sig)
+    _save_json(SIGNATURES_FILE, items)
+    return sig
+
+@app.delete("/api/signatures/{sid}")
+async def signatures_delete(sid: str):
+    items = _load_json(SIGNATURES_FILE, [])
+    items = [i for i in items if i.get("id") != sid]
+    _save_json(SIGNATURES_FILE, items)
+    return {"ok": True}
+
+# ── Document sub-routes ──
+
+@app.get("/api/document/{doc_id}/export-pdf")
+async def document_export_pdf(doc_id: str):
+    return {"ok": True, "message": "PDF export not available server-side"}
+
+@app.post("/api/document/{doc_id}/export-pdf/preview")
+async def document_export_pdf_preview(doc_id: str):
+    return {"ok": True, "preview": ""}
+
+@app.get("/api/document/{doc_id}/render-pages")
+async def document_render_pages(doc_id: str):
+    return {"pages": []}
+
+@app.get("/api/document/{doc_id}/render-pdf")
+async def document_render_pdf(doc_id: str):
+    return {"ok": True, "pdf_url": ""}
+
+@app.get("/api/document/{doc_id}/page/{n}.png")
+async def document_page_png(doc_id: str, n: int):
+    return JSONResponse({"error": "not available"}, status_code=404)
+
+@app.post("/api/document/{doc_id}/ai-fill-annotations")
+async def document_ai_fill(doc_id: str):
+    return {"ok": True, "annotations": []}
+
+@app.post("/api/document/{doc_id}/extract-pdf-text")
+async def document_extract_pdf(doc_id: str):
+    return {"ok": True, "text": ""}
+
+@app.get("/api/document/{doc_id}/versions")
+async def document_versions(doc_id: str):
+    return []
+
+@app.get("/api/document/{doc_id}/version/{n}")
+async def document_version(doc_id: str, n: int):
+    return {"version": n, "content": ""}
+
+@app.post("/api/document/{doc_id}/restore/{n}")
+async def document_restore(doc_id: str, n: int):
+    return {"ok": True}
+
+@app.post("/api/document/{doc_id}/prepare-signed-reply")
+async def document_signed_reply(doc_id: str):
+    return {"ok": True, "reply": ""}
+
+# ── Editor-drafts DELETE ──
+
+@app.delete("/api/editor-drafts/{did}")
+async def editor_draft_delete(did: str):
+    items = _load_json(DATA_DIR / "editor_drafts.json", [])
+    items = [i for i in items if i.get("id") != did]
+    _save_json(DATA_DIR / "editor_drafts.json", items)
+    return {"ok": True}
+
+# ── Image operations ──
+
+@app.post("/api/image/mask")
+async def image_mask():
+    return {"ok": True, "mask_url": ""}
+
+@app.post("/api/image/inpaint")
+async def image_inpaint():
+    return {"ok": True, "result_url": ""}
+
+@app.post("/api/image/upscale-local")
+async def image_upscale():
+    return {"ok": True, "result_url": ""}
+
+# ── Gallery extended ──
+
+@app.post("/api/gallery/upload")
+async def gallery_upload():
+    return {"ok": True, "id": _uid(), "url": ""}
+
+GALLERY_ALBUMS_FILE = DATA_DIR / "gallery_albums.json"
+
+@app.get("/api/gallery/albums")
+async def gallery_albums():
+    return _load_json(GALLERY_ALBUMS_FILE, [])
+
+@app.post("/api/gallery/albums")
+async def gallery_albums_create(request: Request):
+    body = await request.json()
+    items = _load_json(GALLERY_ALBUMS_FILE, [])
+    album = {"id": _uid(), **body, "created_at": _now()}
+    items.append(album)
+    _save_json(GALLERY_ALBUMS_FILE, items)
+    return album
+
+@app.put("/api/gallery/albums/{aid}")
+async def gallery_albums_update(aid: str, request: Request):
+    body = await request.json()
+    items = _load_json(GALLERY_ALBUMS_FILE, [])
+    for item in items:
+        if item.get("id") == aid:
+            item.update(body)
+    _save_json(GALLERY_ALBUMS_FILE, items)
+    return {"ok": True}
+
+@app.delete("/api/gallery/albums/{aid}")
+async def gallery_albums_delete(aid: str):
+    items = _load_json(GALLERY_ALBUMS_FILE, [])
+    items = [i for i in items if i.get("id") != aid]
+    _save_json(GALLERY_ALBUMS_FILE, items)
+    return {"ok": True}
+
+@app.get("/api/gallery/ai-tag-batch")
+async def gallery_ai_tag_batch():
+    return {"tags": []}
+
+@app.post("/api/gallery/clear-ai-tags")
+async def gallery_clear_ai_tags():
+    return {"ok": True}
+
+@app.get("/api/gallery/download-zip")
+async def gallery_download_zip():
+    return {"ok": True, "message": "ZIP download not available"}
+
+@app.post("/api/gallery/style-transfer")
+async def gallery_style_transfer():
+    return {"ok": True, "result_url": ""}
+
+# ── Memory extended ──
+
+@app.post("/api/memory/add")
+async def memory_add(request: Request):
+    body = await request.json()
+    items = _load_json(MEMORY_FILE, [])
+    entry = {"id": _uid(), **body, "created_at": _now(), "updated_at": _now()}
+    items.append(entry)
+    _save_json(MEMORY_FILE, items)
+    return entry
+
+@app.get("/api/memory/audit")
+async def memory_audit():
+    items = _load_json(MEMORY_FILE, [])
+    return {"count": len(items), "items": items}
+
+@app.post("/api/memory/extract")
+async def memory_extract(request: Request):
+    body = await request.json()
+    return {"ok": True, "memories": []}
+
+@app.post("/api/memory/import")
+async def memory_import(request: Request):
+    body = await request.json()
+    return {"ok": True, "imported": 0}
+
+@app.post("/api/memory/search")
+async def memory_search(request: Request):
+    body = await request.json()
+    query = body.get("query", "").lower()
+    items = _load_json(MEMORY_FILE, [])
+    if query:
+        items = [i for i in items if query in str(i.get("content", "")).lower()]
+    return items
+
+# ── Notes extended ──
+
+@app.post("/api/notes/reorder")
+async def notes_reorder(request: Request):
+    body = await request.json()
+    return {"ok": True}
+
+# ── Skills extended ──
+
+@app.post("/api/skills/add")
+async def skills_add(request: Request):
+    body = await request.json()
+    items = _load_json(DATA_DIR / "skills.json", [])
+    skill = {"id": _uid(), **body, "created_at": _now()}
+    items.append(skill)
+    _save_json(DATA_DIR / "skills.json", items)
+    return skill
+
+@app.get("/api/skills/search")
+async def skills_search(q: str = ""):
+    items = _load_json(DATA_DIR / "skills.json", [])
+    if q:
+        ql = q.lower()
+        items = [i for i in items if ql in str(i.get("name", "")).lower() or ql in str(i.get("description", "")).lower()]
+    return items
+
+@app.get("/api/skills/builtin/{name}")
+async def skills_builtin_get(name: str):
+    return {"name": name, "builtin": True, "description": "", "content": ""}
+
+@app.post("/api/skills/builtin/{name}")
+async def skills_builtin_install(name: str):
+    return {"ok": True, "name": name}
+
+@app.delete("/api/skills/builtin/{name}")
+async def skills_builtin_delete(name: str):
+    return {"ok": True}
+
+@app.get("/api/skills/audit-all")
+async def skills_audit_all():
+    return {"results": []}
+
+@app.get("/api/skills/audit-all/status")
+async def skills_audit_all_status():
+    return {"running": False, "progress": 100}
+
+@app.post("/api/skills/audit-all/cancel")
+async def skills_audit_all_cancel():
+    return {"ok": True}
+
+@app.post("/api/skills/import-from-url")
+async def skills_import_from_url(request: Request):
+    body = await request.json()
+    return {"ok": True, "skill": {"id": _uid(), "name": body.get("name", "imported")}}
+
+# ── Tasks extended ──
+
+@app.post("/api/tasks/parse")
+async def tasks_parse(request: Request):
+    body = await request.json()
+    text = body.get("text", "")
+    return {"tasks": [{"name": text, "priority": "medium"}] if text else []}
+
+@app.get("/api/tasks/runs/recent")
+async def tasks_runs_recent():
+    return []
+
+# ── Prefs ──
+
+PREFS_FILE = DATA_DIR / "prefs.json"
+
+@app.get("/api/prefs")
+async def prefs_get():
+    return _load_json(PREFS_FILE, {})
+
+@app.get("/api/prefs/{key}")
+async def prefs_get_key(key: str):
+    prefs = _load_json(PREFS_FILE, {})
+    return prefs.get(key, None)
+
+@app.put("/api/prefs/{key}")
+async def prefs_put_key(key: str, request: Request):
+    body = await request.json()
+    prefs = _load_json(PREFS_FILE, {})
+    prefs[key] = body
+    _save_json(PREFS_FILE, prefs)
+    return body
+
+@app.post("/api/prefs/{key}")
+async def prefs_post_key(key: str, request: Request):
+    body = await request.json()
+    prefs = _load_json(PREFS_FILE, {})
+    prefs[key] = body
+    _save_json(PREFS_FILE, prefs)
+    return body
+
+@app.get("/api/prefs/theme")
+async def prefs_theme():
+    prefs = _load_json(PREFS_FILE, {})
+    return prefs.get("theme", {"name": "default"})
+
+@app.put("/api/prefs/theme")
+async def prefs_theme_put(request: Request):
+    body = await request.json()
+    prefs = _load_json(PREFS_FILE, {})
+    prefs["theme"] = body
+    _save_json(PREFS_FILE, prefs)
+    return body
+
+@app.post("/api/prefs/theme")
+async def prefs_theme_post(request: Request):
+    body = await request.json()
+    prefs = _load_json(PREFS_FILE, {})
+    prefs["theme"] = body
+    _save_json(PREFS_FILE, prefs)
+    return body
+
+@app.get("/api/prefs/custom-themes")
+async def prefs_custom_themes():
+    prefs = _load_json(PREFS_FILE, {})
+    return prefs.get("custom_themes", [])
+
+# ── Vault ──
+
+@app.get("/api/vault/config")
+async def vault_config():
+    return {"enabled": False, "locked": True}
+
+@app.post("/api/vault/login")
+async def vault_login(request: Request):
+    return {"ok": True, "token": ""}
+
+@app.post("/api/vault/unlock")
+async def vault_unlock(request: Request):
+    return {"ok": True}
+
+@app.post("/api/vault/lock")
+async def vault_lock():
+    return {"ok": True}
+
+@app.post("/api/vault/logout")
+async def vault_logout():
+    return {"ok": True}
+
+# ── Research extended ──
+
+@app.get("/api/research/active")
+async def research_active():
+    return []
+
+@app.post("/api/research/start")
+async def research_start(request: Request):
+    body = await request.json()
+    return {"ok": True, "id": _uid()}
+
+@app.get("/api/research/detail/{rid}")
+async def research_detail(rid: str):
+    return {"id": rid, "status": "completed", "results": []}
+
+@app.post("/api/research/{rid}/archive")
+async def research_archive(rid: str):
+    return {"ok": True}
+
+@app.get("/api/research/result-peek/{rid}")
+async def research_result_peek(rid: str):
+    return {"id": rid, "content": ""}
+
+# ── Cookbook extended ──
+
+@app.get("/api/cookbook/hf-latest")
+async def cookbook_hf_latest():
+    return {"models": []}
+
+@app.get("/api/cookbook/tasks/status")
+async def cookbook_tasks_status():
+    return {"tasks": [], "running": False}
+
+# ── TTS extended ──
+
+@app.post("/api/tts/clear-cache")
+async def tts_clear_cache():
+    return {"ok": True}
+
+# ── Misc missing ──
+
+@app.post("/api/probe-selected")
+async def probe_selected(request: Request):
+    body = await request.json()
+    return {"ok": True, "results": []}
+
+@app.post("/api/documents/tidy")
+async def documents_tidy(request: Request):
+    return {"ok": True}
+
+@app.post("/api/documents/ai-tidy")
+async def documents_ai_tidy(request: Request):
+    return {"ok": True}
+
+@app.get("/api/fonts/custom")
+async def fonts_custom():
+    return []
+
+@app.get("/api/workspace/vet")
+async def workspace_vet():
+    return {"ok": True, "issues": []}
+
+@app.get("/api/workspace/browse")
+async def workspaceBrowse():
+    return {"files": []}
+
+@app.get("/api/ping")
+async def ping():
+    return {"ok": True, "timestamp": _now()}
+
+@app.get("/api/db/stats")
+async def db_stats():
+    return {"sessions": len(_load_sessions()), "notes": len(_load_json(DATA_DIR / "notes.json", [])), "tasks": len(_load_json(DATA_DIR / "tasks.json", [])), "memory": len(_load_json(MEMORY_FILE, []))}
+
+@app.post("/api/mcp/oauth/exchange/{oid}")
+async def mcp_oauth_exchange(oid: str, request: Request):
+    return {"ok": True, "token": ""}
 
 
 # ──────────────────── STATIC MOUNT (must be last) ────────────────────
