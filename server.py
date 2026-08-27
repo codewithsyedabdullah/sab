@@ -71,6 +71,27 @@ def _uid() -> str:
     return uuid.uuid4().hex[:8]
 
 
+def html_escape(s: Any) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
+
+
+def _ssh_keypair():
+    import subprocess as _sp
+    import tempfile, os
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            priv = os.path.join(td, "sab")
+            try:
+                _sp.run(["ssh-keygen", "-t", "ed25519", "-f", priv, "-N", "", "-q"], check=True, capture_output=True, timeout=10)
+            except Exception:
+                _sp.run(["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", priv, "-N", "", "-q"], check=True, capture_output=True, timeout=20)
+            priv_txt = open(priv, encoding="utf-8").read().strip()
+            pub_txt = open(priv + ".pub", encoding="utf-8").read().strip()
+            return priv_txt, pub_txt
+    except Exception:
+        return "", ""
+
+
 def _load_json(path: Path, default: Any = None):
     if path.exists():
         try:
@@ -1014,7 +1035,7 @@ async def tasks_delete(tid: str):
 
 @app.get("/api/tasks/onboarding")
 async def tasks_onboarding():
-    return {"completed": True}
+    return {"completed": True, "opened": True}
 
 
 @app.post("/api/tasks/onboarding")
@@ -2041,12 +2062,12 @@ async def cookbook_kill_pid(request: Request):
 
 @app.post("/api/cookbook/install-system-deps")
 async def cookbook_install_deps(request: Request):
-    return JSONResponse({"status": "not applicable"})
+    return {"ok": True, "status": "not applicable", "error": None, "detail": "System dependency installation is not applicable in this SAB build"}
 
 
 @app.post("/api/cookbook/rebuild-engine")
 async def cookbook_rebuild(request: Request):
-    return JSONResponse({"status": "not applicable"})
+    return {"ok": True, "status": "not applicable", "error": None, "detail": "Engine rebuild is not applicable in this SAB build"}
 
 
 @app.get("/api/cookbook/hf-gguf-files")
@@ -2061,12 +2082,14 @@ async def cookbook_test_ssh(request: Request):
 
 @app.get("/api/cookbook/ssh-key")
 async def cookbook_ssh_key():
-    return {"key": "", "public_key": ""}
+    key, pub = _ssh_keypair()
+    return {"key": key, "public_key": pub}
 
 
 @app.post("/api/cookbook/ssh-key")
 async def cookbook_gen_ssh_key():
-    return {"key": ""}
+    key, pub = _ssh_keypair()
+    return {"ok": True, "error": None, "key": key, "public_key": pub}
 
 
 @app.post("/api/cookbook/setup")
@@ -2272,12 +2295,12 @@ async def compare_record(request: Request):
 
 @app.get("/api/research/status/{sid}")
 async def research_status(sid: str):
-    return {"status": "idle"}
+    return {"status": "idle", "query": "", "progress": {"phase": "", "round": 0, "total_sources": 0}, "avg_duration": 0}
 
 
 @app.post("/api/research/result/{sid}")
 async def research_result(sid: str):
-    return {"status": "idle", "results": []}
+    return {"result": "", "sources": [], "raw_findings": [], "status": "idle"}
 
 
 @app.post("/api/research/cancel/{sid}")
@@ -2287,7 +2310,20 @@ async def research_cancel(sid: str):
 
 @app.get("/api/research/report/{sid}")
 async def research_report(sid: str):
-    return {"report": ""}
+    html = f"""<!DOCTYPE html><html><head><meta charset='utf-8'><title>SAB Research Report</title>
+<style>
+body{{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#1a1d23;color:#e6e6e6;margin:0;padding:32px;line-height:1.6}}
+.wrap{{max-width:820px;margin:0 auto}}
+h1{{font-size:20px;color:#9cdef2;border-bottom:1px solid #2a2e36;padding-bottom:14px}}
+.meta{{color:#8b94a3;font-size:12px;margin-bottom:24px}}
+.empty{{color:#8b94a3;font-style:italic;background:#23272f;border:1px dashed #2a2e36;padding:18px;border-radius:8px}}
+code{{background:#23272f;padding:2px 6px;border-radius:4px;font-size:12px}}
+</style></head><body><div class='wrap'>
+<h1>SAB Research Report</h1>
+<div class='meta'>Session: {html_escape(sid)}</div>
+<div class='empty'>No research run yet for this session in local mode. Start a research job from the Research panel to see its report here.</div>
+</div></body></html>"""
+    return HTMLResponse(html)
 
 
 @app.post("/api/research/spinoff/{sid}")
@@ -3069,7 +3105,7 @@ async def memory_extract(request: Request):
         body = {k: v for k, v in form.items()}
     else:
         body = await request.json()
-    return {"ok": True, "memories": []}
+    return {"ok": True, "memories": [], "suggestions": []}
 
 @app.post("/api/memory/import")
 async def memory_import(request: Request):
@@ -3079,7 +3115,7 @@ async def memory_import(request: Request):
         body = {k: v for k, v in form.items()}
     else:
         body = await request.json()
-    return {"ok": True, "imported": 0}
+    return {"ok": True, "imported": 0, "suggestions": []}
 
 @app.post("/api/memory/{mid}/pin")
 async def memory_pin(mid: str, request: Request):
@@ -3151,7 +3187,7 @@ async def skills_audit_all():
 
 @app.get("/api/skills/audit-all/status")
 async def skills_audit_all_status():
-    return {"running": False, "progress": 100}
+    return {"status": "none", "running": False, "progress": 100, "done": 0, "total": 0, "current": None, "results": [], "log": [], "teacher": None}
 
 @app.post("/api/skills/audit-all/cancel")
 async def skills_audit_all_cancel():
@@ -3182,7 +3218,7 @@ async def skills_save_markdown(name: str, request: Request):
 
 @app.get("/api/skills/{name}/test-status")
 async def skills_test_status(name: str):
-    return {"status": "idle", "result": None}
+    return {"status": "none", "result": None, "log": [], "approval": None, "verdict": None}
 
 @app.post("/api/skills/{name}/test")
 async def skills_test(name: str, request: Request):
@@ -3359,13 +3395,18 @@ async def research_start(request: Request):
 
 @app.get("/api/research/detail/{rid}")
 async def research_detail(rid: str):
-    return {"id": rid, "status": "completed", "results": []}
+    return {
+        "id": rid, "status": "completed", "results": [],
+        "summary": "", "report_summary": "", "result": "", "raw_report": "",
+        "sources": [], "raw_findings": [], "session_id": rid, "category": "",
+    }
 
 @app.post("/api/research/{rid}/archive")
 async def research_archive(rid: str):
     return {"ok": True}
 
 @app.get("/api/research/result-peek/{rid}")
+@app.post("/api/research/result-peek/{rid}")
 async def research_result_peek(rid: str):
     return {"id": rid, "result": "", "sources": [], "raw_findings": [], "category": ""}
 
@@ -3376,7 +3417,7 @@ async def research_delete(rid: str):
 @app.get("/api/research/stream/{rid}")
 async def research_stream(rid: str):
     async def generate():
-        yield f"data: {json.dumps({'status': 'completed', 'final': True})}\n\n"
+        yield f"data: {json.dumps({'status': 'done', 'final': True, 'result': '', 'sources': [], 'raw_findings': []})}\n\n"
         yield "data: [DONE]\n\n"
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -3565,7 +3606,7 @@ async def skills_search_post(request: Request):
     if q:
         ql = q.lower()
         items = [i for i in items if ql in str(i.get("name", "")).lower() or ql in str(i.get("description", "")).lower()]
-    return items
+    return {"skills": items}
 
 @app.post("/api/skills/audit-all")
 async def skills_audit_all_post(request: Request):
@@ -3629,7 +3670,7 @@ async def calendar_config_accounts_delete(aid: str):
 @app.post("/api/memory/audit")
 async def memory_audit_post(request: Request):
     items = _load_json(MEMORY_FILE, [])
-    return {"count": len(items), "items": items}
+    return {"removed": 0, "count": len(items), "items": items, "suggestions": []}
 
 # ── Gallery download-zip POST alias ──
 
