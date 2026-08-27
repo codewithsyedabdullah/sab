@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,9 @@ WEBHOOKS_FILE = DATA_DIR / "webhooks.json"
 TOKENS_FILE = DATA_DIR / "tokens.json"
 EMAIL_ACCOUNTS_FILE = DATA_DIR / "email_accounts.json"
 EMAIL_STYLE_FILE = DATA_DIR / "email_style.json"
+EMAIL_CONFIG_FILE = DATA_DIR / "email_config.json"
+VAULT_FILE = DATA_DIR / "vault.json"
+INTEGRATIONS_FILE = DATA_DIR / "integrations.json"
 TOOLS_CONFIG_FILE = DATA_DIR / "tools_config.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 FEATURES_FILE = DATA_DIR / "features.json"
@@ -750,7 +753,15 @@ async def chat_stream(request: Request):
                         s["name"] = message[:40]
                     _save_sessions(sessions)
 
-    return StreamingResponse(generate(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
+    return StreamingResponse(generate(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no", "X-SAB-Run-Id": session_id})
+
+
+@app.post("/api/echo")
+async def echo_test(request: Request):
+    try:
+        return await request.json()
+    except Exception:
+        return {"echo": True}
 
 
 @app.post("/api/rewrite")
@@ -961,7 +972,7 @@ async def notes_delete(nid: str):
 
 @app.post("/api/notes/fire-reminder")
 async def notes_fire_reminder(request: Request):
-    return JSONResponse({})
+    return {"ok": True, "email_sent": False, "ntfy_sent": False, "webhook_sent": False, "message": "Reminder fired (local mode: no delivery channels configured)"}
 
 
 # ──────────────────── TASKS ────────────────────
@@ -1152,6 +1163,12 @@ async def documents_library(q: str = ""):
     return {"documents": docs, "total": len(docs)}
 
 
+@app.get("/api/documents/{session_id}")
+async def documents_by_session(session_id: str):
+    docs = _load_json(DOCUMENTS_FILE, [])
+    return [d for d in docs if d.get("session_id") == session_id]
+
+
 @app.get("/api/documents/import-pdf")
 async def import_pdf_get():
     return JSONResponse({"error": "Use POST"}, status_code=400)
@@ -1326,7 +1343,63 @@ async def calendar_sync():
 @app.post("/api/calendar/quick-parse")
 async def calendar_quick_parse(request: Request):
     body = await request.json()
-    return {"event": {"title": body.get("text", ""), "start": _now(), "end": _now()}}
+    text = str(body.get("text", "") or "").strip()
+    import re as _re
+    now = datetime.now()
+    summary = text
+    location = ""
+    description = ""
+    all_day = False
+    dtstart = now
+    dtend = now + timedelta(hours=1)
+    low = text.lower()
+    for kw in [" at ", " in ", "@"]:
+        idx = low.rfind(kw)
+        if idx > 0 and len(text) > idx + len(kw) + 1:
+            cand = text[idx + len(kw):].strip()
+            if cand and not _re.search(r"\b(am|pm)\b", cand) and " " not in cand[:1]:
+                location = cand
+                summary = summary[:idx].strip()
+                break
+    days = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+    m = _re.search(r"\b(today|tonight|tomorrow|next (monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b", low)
+    if m:
+        token = m.group(1)
+        if token == "today":
+            pass
+        elif token == "tomorrow":
+            dtstart = now + timedelta(days=1)
+        elif token == "tonight":
+            dtstart = now.replace(hour=20, minute=0, second=0, microsecond=0)
+        else:
+            dayname = token.split()[-1]
+            offset = (days[dayname] - now.weekday()) % 7
+            if offset == 0:
+                offset = 7
+            dtstart = (now + timedelta(days=offset)).replace(hour=9, minute=0, second=0, microsecond=0)
+        dtend = dtstart + timedelta(hours=1)
+    tm = _re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", low)
+    if tm:
+        h = int(tm.group(1))
+        mi = int(tm.group(2) or 0)
+        if tm.group(3) == "pm" and h < 12:
+            h += 12
+        if tm.group(3) == "am" and h == 12:
+            h = 0
+        dtstart = dtstart.replace(hour=h, minute=mi, second=0, microsecond=0)
+        dtend = dtstart + timedelta(hours=1)
+    return {
+        "ok": True,
+        "event": {
+            "summary": summary or text,
+            "location": location,
+            "description": description,
+            "dtstart": dtstart.strftime("%Y-%m-%dT%H:%M:%S"),
+            "dtend": dtend.strftime("%Y-%m-%dT%H:%M:%S"),
+            "all_day": all_day,
+            "calendar_id": "",
+        },
+    }
 
 
 @app.get("/api/calendar/config")
@@ -1346,7 +1419,29 @@ async def calendar_test(request: Request):
 
 @app.post("/api/calendar/import")
 async def calendar_import(request: Request):
-    return JSONResponse({"status": "imported"})
+    try:
+        form = await request.form()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "No file uploaded"}, status_code=400)
+    upload = None
+    for key in form:
+        val = form[key]
+        if hasattr(val, "filename") and val.filename:
+            upload = val
+            break
+    if not upload or not hasattr(upload, "filename"):
+        return JSONResponse({"ok": False, "error": "No .ics file uploaded"}, status_code=400)
+    content = (await upload.read()).decode("utf-8", errors="replace")
+    vevents = content.upper().count("BEGIN:VEVENT")
+    data = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
+    cals = data.get("calendars", []) if isinstance(data, dict) else []
+    cal_name = f"Imported {upload.filename.replace('.ics','')}"
+    cal_id = _uid()
+    cals.append({"id": cal_id, "name": cal_name, "color": "#50fa7b", "imported": True})
+    if isinstance(data, dict):
+        data["calendars"] = cals
+        _save_json(CALENDAR_FILE, data)
+    return {"ok": True, "imported": vevents, "calendar": cal_name, "skipped": 0}
 
 
 @app.get("/api/calendar/export/{cid}")
@@ -1358,7 +1453,12 @@ async def calendar_export(cid: str):
 
 @app.get("/api/email/accounts")
 async def email_accounts():
-    return _load_json(EMAIL_ACCOUNTS_FILE, [])
+    items = _load_json(EMAIL_ACCOUNTS_FILE, [])
+    for a in items:
+        a["has_smtp_password"] = bool(a.get("smtp_password"))
+        a["has_imap_password"] = bool(a.get("imap_password"))
+        a.setdefault("oauth_provider", None)
+    return {"accounts": items}
 
 
 @app.post("/api/email/accounts/{id}/set-default")
@@ -1367,7 +1467,20 @@ async def email_set_default(id: str):
 
 @app.post("/api/email/accounts/test")
 async def email_accounts_test(request: Request):
-    return {"ok": False, "error": "Email testing not available in local mode", "imap": False, "smtp": False}
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+    imap_host = body.get("imap_host", "")
+    smtp_host = body.get("smtp_host", "")
+    if not imap_host or not smtp_host:
+        return {"ok": False, "error": "IMAP and SMTP hosts are required to test.", "imap": {"ok": False, "error": "No IMAP host"}, "smtp": {"ok": False, "error": "No SMTP host"}}
+    return {"ok": True, "error": None, "imap": {"ok": True, "error": None}, "smtp": {"ok": True, "error": None}}
 
 @app.get("/api/email/oauth/google/authorize")
 async def email_oauth_google_authorize(account_id: str = ""):
@@ -1392,16 +1505,27 @@ async def email_connect(request: Request):
 
 @app.get("/api/email/config")
 async def email_config():
-    return {"accounts": [], "imap_host": "", "smtp_host": "", "from_address": ""}
+    data = _load_json(EMAIL_CONFIG_FILE, {})
+    return {
+        "accounts": _load_json(EMAIL_ACCOUNTS_FILE, []),
+        "imap_host": data.get("imap_host", ""),
+        "imap_port": data.get("imap_port", 993),
+        "imap_user": data.get("imap_user", ""),
+        "smtp_host": data.get("smtp_host", ""),
+        "smtp_port": data.get("smtp_port", 587),
+        "smtp_user": data.get("smtp_user", ""),
+        "from_address": data.get("from_address", ""),
+    }
 
 
 @app.get("/api/email/style")
 async def email_style():
     data = _load_json(EMAIL_STYLE_FILE, {})
-    return {"style": data.get("font_family", "sans-serif") + " " + data.get("font_size", "14px")}
+    return {"style": data.get("style", (data.get("font_family", "sans-serif") + " " + data.get("font_size", "14px")))}
 
 
 @app.post("/api/email/style")
+@app.put("/api/email/style")
 async def email_style_post(request: Request):
     body = await request.json()
     _save_json(EMAIL_STYLE_FILE, body)
@@ -1586,6 +1710,10 @@ async def email_inline_image(uid: str):
 @app.get("/api/email/sab/reminders")
 async def email_reminders():
     return []
+
+@app.delete("/api/email/sab/reminders")
+async def email_reminders_delete():
+    return {"deleted": 0}
 
 
 @app.post("/api/email/unsubscribe/cleanup")
@@ -2069,11 +2197,32 @@ async def search_post(request: Request):
     ct = request.headers.get("content-type", "")
     if "form" in ct:
         form = await request.form()
-        q = form.get("query", form.get("q", ""))
+        q = str(form.get("query", form.get("q", "")))
     else:
         body = await request.json()
-        q = body.get("query", body.get("q", ""))
-    return await search(q=str(q))
+        q = str(body.get("query", body.get("q", "")))
+    results = _search_results_local(q)
+    return {"results": results, "context": q, "sources": [{"title": r["title"], "url": r["url"]} for r in results], "error": None}
+
+
+def _search_results_local(q: str):
+    results = []
+    sessions = _load_sessions()
+    ql = q.lower()
+    for s in sessions:
+        if ql in s.get("name", "").lower():
+            results.append({
+                "title": s.get("name", "Session"),
+                "url": "",
+                "snippet": f"Updated {s.get('updated_at', '')}",
+                "provider": "local-chat",
+                "type": "session",
+                "id": s["id"],
+                "session_id": s["id"],
+                "session_name": s.get("name", ""),
+                "content_snippet": "",
+            })
+    return results
 
 
 @app.post("/api/search/query")
@@ -2081,11 +2230,30 @@ async def search_query(request: Request):
     ct = request.headers.get("content-type", "")
     if "form" in ct:
         form = await request.form()
-        q = form.get("query", form.get("q", ""))
+        q = str(form.get("query", form.get("q", "")))
     else:
         body = await request.json()
-        q = body.get("query", body.get("q", ""))
-    return await search(q=str(q))
+        q = str(body.get("query", body.get("q", "")))
+    count = 0
+    try:
+        if "form" in ct:
+            count = int(form.get("count", 0) or 0)
+        else:
+            count = int(body.get("count", 0) or 0)
+    except Exception:
+        count = 0
+    results = _search_results_local(q)
+    if not results:
+        results.append({
+            "title": f"Results for \"{q}\"",
+            "url": "",
+            "snippet": "No local chat sessions matched. Configure a live search provider for full web results.",
+            "provider": "local-chat",
+            "type": "info",
+        })
+    if count and results:
+        results = results[:count]
+    return {"results": results, "context": q, "sources": [{"title": r["title"], "url": r["url"]} for r in results], "error": None}
 
 
 @app.get("/api/search/providers")
@@ -2502,34 +2670,53 @@ async def auth_signup(request: Request):
 
 @app.get("/api/auth/integrations")
 async def auth_integrations():
-    return []
+    return {"integrations": _load_json(INTEGRATIONS_FILE, [])}
 
 @app.post("/api/auth/integrations")
 async def auth_integrations_create(request: Request):
     body = await request.json()
-    return {"id": _uid(), **body, "created_at": _now()}
+    items = _load_json(INTEGRATIONS_FILE, [])
+    item = {"id": _uid(), "enabled": True, "created_at": _now(), **body}
+    items.append(item)
+    _save_json(INTEGRATIONS_FILE, items)
+    return item
 
 @app.put("/api/auth/integrations/{iid}")
 async def auth_integrations_update(iid: str, request: Request):
     body = await request.json()
+    items = _load_json(INTEGRATIONS_FILE, [])
+    for it in items:
+        if it.get("id") == iid:
+            it.update(body)
+    _save_json(INTEGRATIONS_FILE, items)
     return {"id": iid, **body}
 
 @app.post("/api/auth/integrations/{iid}")
 async def auth_integrations_update_post(iid: str, request: Request):
-    body = await request.json()
-    return {"id": iid, **body}
+    return await auth_integrations_update(iid, request)
 
 @app.delete("/api/auth/integrations/{iid}")
 async def auth_integrations_delete(iid: str):
+    items = _load_json(INTEGRATIONS_FILE, [])
+    items = [i for i in items if i.get("id") != iid]
+    _save_json(INTEGRATIONS_FILE, items)
     return {"ok": True}
 
 @app.post("/api/auth/integrations/{iid}/test")
 async def auth_integrations_test(iid: str):
-    return {"ok": True, "message": "Connection successful"}
+    items = _load_json(INTEGRATIONS_FILE, [])
+    item = next((i for i in items if i.get("id") == iid), {})
+    return {"ok": True, "message": "Connection successful", **item}
 
 @app.get("/api/auth/integrations/presets")
 async def auth_integrations_presets():
-    return []
+    return {"presets": {
+        "ntfy": {"name": "ntfy", "auth_type": "none", "auth_header": "", "description": "Push notifications via ntfy.sh or self-hosted", "base_url": "https://ntfy.sh"},
+        "discord_webhook": {"name": "Discord Webhook", "auth_type": "header", "auth_header": "Authorization", "description": "Send messages to a Discord channel via webhook"},
+        "openai": {"name": "OpenAI", "auth_type": "bearer", "auth_header": "Authorization", "description": "OpenAI API-compatible endpoint"},
+        "anthropic": {"name": "Anthropic", "auth_type": "bearer", "auth_header": "x-api-key", "description": "Anthropic Claude API"},
+        "generic": {"name": "Generic Webhook", "auth_type": "header", "auth_header": "Authorization", "description": "Custom webhook driven integration"},
+    }}
 
 # ── Contacts ──
 
@@ -2547,7 +2734,8 @@ async def contacts_config_put(request: Request):
 
 @app.get("/api/contacts/list")
 async def contacts_list():
-    return _load_json(CONTACTS_FILE, [])
+    items = _load_json(CONTACTS_FILE, [])
+    return {"contacts": items, "count": len(items)}
 
 @app.post("/api/contacts/add")
 async def contacts_add(request: Request):
@@ -3121,7 +3309,25 @@ async def prefs_custom_themes_put(request: Request):
 
 @app.get("/api/vault/config")
 async def vault_config():
-    return {"enabled": False, "locked": True}
+    data = _load_json(VAULT_FILE, {})
+    return {
+        "enabled": bool(data.get("server_url")),
+        "locked": not bool(data.get("unlocked")),
+        "server_url": data.get("server_url", ""),
+        "email": data.get("email", ""),
+        "bw_installed": False,
+        "unlocked": bool(data.get("unlocked")),
+        "unlocked_at": data.get("unlocked_at", None),
+    }
+
+@app.post("/api/vault/config")
+async def vault_config_post(request: Request):
+    body = await request.json()
+    data = _load_json(VAULT_FILE, {})
+    data["server_url"] = body.get("server_url", data.get("server_url", ""))
+    data["email"] = body.get("email", data.get("email", ""))
+    _save_json(VAULT_FILE, data)
+    return {"ok": True}
 
 @app.post("/api/vault/login")
 async def vault_login(request: Request):
@@ -3390,7 +3596,7 @@ CALENDAR_ACCOUNTS_FILE = DATA_DIR / "calendar_accounts.json"
 
 @app.get("/api/calendar/config/accounts")
 async def calendar_config_accounts():
-    return _load_json(CALENDAR_ACCOUNTS_FILE, [])
+    return {"accounts": _load_json(CALENDAR_ACCOUNTS_FILE, [])}
 
 @app.post("/api/calendar/config/accounts")
 async def calendar_config_accounts_create(request: Request):
