@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
 import os
 import platform
+import secrets
 import shutil
 import subprocess
 import sys
@@ -14,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, FileResponse, Response, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -23,6 +27,23 @@ from sab.config import Config
 from sab.agent import Agent
 
 app = FastAPI(title="SAB")
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    is_api = path.startswith("/api/")
+    if not is_api:
+        return await call_next(request)
+    if not _auth_enabled():
+        return await call_next(request)
+    # Always-accessible endpoints for the auth flow itself.
+    if path.startswith("/api/auth/"):
+        return await call_next(request)
+    if _current_user(request):
+        return await call_next(request)
+    return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+
 
 STATIC_DIR = Path(__file__).parent / "static"
 DATA_DIR = Path(__file__).parent / "data"
@@ -53,6 +74,7 @@ FEATURES_FILE = DATA_DIR / "features.json"
 PERSONAL_RAG_FILE = DATA_DIR / "personal_rag.json"
 ASSISTANT_SETTINGS_FILE = DATA_DIR / "assistant_settings.json"
 EDITOR_DRAFTS_FILE = DATA_DIR / "editor_drafts.json"
+AUTH_FILE = DATA_DIR / "auth.json"
 
 for d in [DATA_DIR, HISTORIES_DIR, UPLOADS_DIR, SKILLS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -69,6 +91,102 @@ def _now() -> str:
 
 def _uid() -> str:
     return uuid.uuid4().hex[:8]
+
+
+def _hash_password(password: str, iterations: int = 240_000) -> dict:
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return {
+        "algo": "pbkdf2_sha256",
+        "iterations": iterations,
+        "salt": base64.b64encode(salt).decode("ascii"),
+        "hash": base64.b64encode(dk).decode("ascii"),
+    }
+
+
+def _verify_password(password: str, record: dict) -> bool:
+    try:
+        if not record or record.get("algo") != "pbkdf2_sha256":
+            return False
+        salt = base64.b64decode(record.get("salt", ""))
+        expected = base64.b64decode(record.get("hash", ""))
+        iterations = int(record.get("iterations", 240_000))
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        return hmac.compare_digest(dk, expected)
+    except Exception:
+        return False
+
+
+def _equal_str(a: str, b: str) -> bool:
+    return hmac.compare_digest(str(a or ""), str(b or ""))
+
+
+def _load_auth() -> dict:
+    return _load_json(AUTH_FILE, {})
+
+
+def _save_auth(auth: dict):
+    _save_json(AUTH_FILE, auth)
+    try:
+        os.chmod(AUTH_FILE, 0o600)
+    except Exception:
+        pass
+
+
+def _auth_configured() -> bool:
+    return AUTH_FILE.exists() and bool(_load_auth().get("password_hash"))
+
+
+def _new_session_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def _issue_session(auth: dict, username: str) -> str:
+    token = _new_session_token()
+    sessions = auth.setdefault("sessions", {})
+    sessions[token] = {"username": username, "created": _now()}
+    _save_auth(auth)
+    return token
+
+
+def _revoke_session(auth: dict, token: str):
+    sessions = auth.get("sessions", {})
+    if token in sessions:
+        del sessions[token]
+        _save_auth(auth)
+
+
+def _read_session_token(request: Request) -> str:
+    token = ""
+    try:
+        ck = request.cookies.get("sab_session", "")
+        if ck:
+            token = ck
+    except Exception:
+        pass
+    if not token:
+        token = request.headers.get("X-SAB-Token", "")
+    return token
+
+
+def _current_user(request: Request) -> str | None:
+    if not _auth_configured():
+        return "sab"
+    token = _read_session_token(request)
+    if not token:
+        return None
+    auth = _load_auth()
+    sess = auth.get("sessions", {}).get(token)
+    if not sess:
+        return None
+    return sess.get("username", "sab")
+
+
+def _auth_enabled() -> bool:
+    forced_open = os.getenv("SAB_AUTH_OPEN", "").strip().lower()
+    if forced_open in ("1", "true", "yes", "on"):
+        return False
+    return _auth_configured()
 
 
 def html_escape(s: Any) -> str:
@@ -141,13 +259,26 @@ def _json_or_form(body: Any) -> dict:
 # ──────────────────── AUTH ────────────────────
 
 @app.get("/api/auth/status")
-async def auth_status():
-    return {"authenticated": True, "configured": True, "signup_enabled": False, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}, "username": "sab", "is_admin": True, "display_name": "SAB", "privileges": []}
+async def auth_status(request: Request):
+    configured = _auth_configured()
+    user = _current_user(request)
+    authenticated = (not configured) or (user is not None)
+    username = user if user else "sab"
+    return {
+        "authenticated": authenticated,
+        "configured": configured,
+        "signup_enabled": False,
+        "user": {"username": username, "is_admin": True, "display_name": username.upper()} if authenticated else None,
+        "username": username if authenticated else "",
+        "is_admin": authenticated,
+        "display_name": username.upper() if authenticated else "",
+        "privileges": [],
+    }
 
 
 @app.get("/api/auth/policy")
 async def auth_policy():
-    return {"signup_enabled": False, "password_min_length": 8}
+    return {"signup_enabled": False, "password_min_length": 8, "reserved_usernames": ["sab", "admin", "root", "system"]}
 
 
 @app.get("/api/auth/settings")
@@ -2644,7 +2775,9 @@ async def preset_groups_save(request: Request):
 # ──────────────────── PAGE ROUTES ────────────────────
 
 @app.get("/")
-async def root():
+async def root(request: Request):
+    if _auth_enabled() and not _current_user(request):
+        return RedirectResponse("/login", status_code=302)
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     html = html.replace("{{CSP_NONCE}}", "")
     return HTMLResponse(html)
@@ -2663,19 +2796,90 @@ async def login_page():
 
 # ── Auth: login / logout / password / 2FA ──
 
+def _session_cookie(token: str, max_age: int) -> str:
+    return f"sab_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
+
+
+@app.post("/api/auth/setup")
+async def auth_setup(request: Request):
+    if _auth_configured():
+        return JSONResponse({"detail": "Setup already completed"}, status_code=400)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    username = str(body.get("username", "sab")).strip().lower() or "sab"
+    password = str(body.get("password", ""))
+    if len(password) < 8:
+        return JSONResponse({"detail": "Password must be at least 8 characters"}, status_code=400)
+    auth = {
+        "username": username,
+        "password_hash": _hash_password(password),
+        "sessions": {},
+    }
+    _save_auth(auth)
+    token = _issue_session(auth, username)
+    resp = JSONResponse({"ok": True, "user": {"username": username, "is_admin": True, "display_name": username.upper()}})
+    resp.set_cookie("sab_session", token, max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax", path="/")
+    return resp
+
+
 @app.post("/api/auth/login")
 async def auth_login(request: Request):
-    body = await request.json()
-    username = body.get("username", "sab")
-    return {"ok": True, "user": {"username": username, "is_admin": True, "display_name": username.upper()}}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    username = str(body.get("username", "sab")).strip().lower()
+    password = str(body.get("password", ""))
+    remember = bool(body.get("remember", False))
+    auth = _load_auth()
+    if not auth.get("password_hash"):
+        # Fresh install: only reachable if someone hits login before setup.
+        return JSONResponse({"detail": "No account configured yet"}, status_code=400)
+    configured_user = str(auth.get("username", "sab")).lower()
+    if username != configured_user:
+        return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
+    if not _verify_password(password, auth.get("password_hash", {})):
+        return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
+    token = _issue_session(auth, configured_user)
+    max_age = 60 * 60 * 24 * 30 if remember else 60 * 60 * 8
+    resp = JSONResponse({"ok": True, "user": {"username": configured_user, "is_admin": True, "display_name": configured_user.upper()}})
+    resp.set_cookie("sab_session", token, max_age=max_age, httponly=True, samesite="lax", path="/")
+    return resp
+
 
 @app.post("/api/auth/logout")
-async def auth_logout():
-    return {"ok": True}
+async def auth_logout(request: Request):
+    auth = _load_auth()
+    _revoke_session(auth, _read_session_token(request))
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie("sab_session", path="/")
+    return resp
+
 
 @app.post("/api/auth/change-password")
 async def auth_change_password(request: Request):
+    if not _auth_enabled():
+        return JSONResponse({"ok": True})
+    user = _current_user(request)
+    if not user:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    old_password = str(body.get("old_password", ""))
+    new_password = str(body.get("new_password", ""))
+    auth = _load_auth()
+    if not _verify_password(old_password, auth.get("password_hash", {})):
+        return JSONResponse({"detail": "Current password is incorrect"}, status_code=400)
+    if len(new_password) < 8:
+        return JSONResponse({"detail": "New password must be at least 8 characters"}, status_code=400)
+    auth["password_hash"] = _hash_password(new_password)
+    _save_auth(auth)
     return {"ok": True}
+
 
 @app.get("/api/auth/2fa/status")
 async def auth_2fa_status():
@@ -2693,14 +2897,9 @@ async def auth_2fa_confirm(request: Request):
 async def auth_2fa_disable(request: Request):
     return {"ok": True}
 
-@app.post("/api/auth/setup")
-async def auth_setup(request: Request):
-    return {"ok": True, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}}
-
 @app.post("/api/auth/signup")
 async def auth_signup(request: Request):
-    body = await request.json()
-    return {"ok": True, "user": {"username": body.get("username", "user"), "is_admin": False}}
+    return JSONResponse({"detail": "Signup is disabled"}, status_code=403)
 
 # ── Auth: integrations ──
 
