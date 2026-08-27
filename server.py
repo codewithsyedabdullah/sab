@@ -118,7 +118,7 @@ def _json_or_form(body: Any) -> dict:
 
 @app.get("/api/auth/status")
 async def auth_status():
-    return {"authenticated": True, "configured": True, "signup_enabled": False, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}}
+    return {"authenticated": True, "configured": True, "signup_enabled": False, "user": {"username": "sab", "is_admin": True, "display_name": "SAB"}, "username": "sab", "is_admin": True, "display_name": "SAB", "privileges": []}
 
 
 @app.get("/api/auth/policy")
@@ -177,16 +177,19 @@ async def auth_user_privileges(username: str):
 
 
 @app.post("/api/auth/users/{username}/privileges")
+@app.put("/api/auth/users/{username}/privileges")
 async def auth_set_privileges(username: str, request: Request):
     return JSONResponse({})
 
 
 @app.post("/api/auth/users/{username}/rename")
+@app.put("/api/auth/users/{username}/rename")
 async def auth_rename_user(username: str, request: Request):
     return JSONResponse({})
 
 
 @app.post("/api/auth/users/{username}/admin")
+@app.put("/api/auth/users/{username}/admin")
 async def auth_toggle_admin(username: str, request: Request):
     return JSONResponse({})
 
@@ -277,7 +280,12 @@ async def model_endpoints():
 
 @app.post("/api/model-endpoints")
 async def create_model_endpoint(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
     ep = {"id": _uid(), **body}
     endpoints.append(ep)
@@ -374,12 +382,13 @@ async def list_sessions():
 
 @app.get("/api/sessions/archived")
 async def archived_sessions(limit: int = 100, sort: str = "recent"):
-    return [s for s in _load_sessions() if s.get("archived", False)][:limit]
+    sessions = [s for s in _load_sessions() if s.get("archived", False)][:limit]
+    return {"sessions": sessions, "total": len(sessions)}
 
 
 @app.post("/api/sessions/auto-sort")
 async def auto_sort(request: Request):
-    return JSONResponse({})
+    return {"status": "ok", "updated": 0, "folders": [], "deleted_empty": 0, "deleted_throwaway": 0, "unfiled_remaining": 0}
 
 
 @app.get("/api/sessions/auto-sort")
@@ -611,7 +620,9 @@ async def session_context(sid: str):
 @app.get("/api/session/{sid}/context_info")
 async def session_context_info(sid: str):
     history = _get_history(sid)
-    return {"total_messages": len(history), "estimated_tokens": sum(len(m.get("content", "")) // 4 for m in history)}
+    used_tokens = sum(len(m.get("content", "")) // 4 for m in history)
+    context_length = 32768
+    return {"total_messages": len(history), "estimated_tokens": used_tokens, "context_length": context_length, "used_tokens": used_tokens, "context_percent": round((used_tokens / context_length) * 100, 1) if context_length > 0 else 0}
 
 
 # ──────────────────── HISTORY ────────────────────
@@ -651,10 +662,23 @@ async def resume_chat(sid: str):
 
 @app.post("/api/chat_stream")
 async def chat_stream(request: Request):
-    form = await request.form()
-    message = str(form.get("message", ""))
-    session_id = str(form.get("session", "") or form.get("session_id", ""))
-    mode = str(form.get("mode", "chat"))
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        message = str(form.get("message", ""))
+        session_id = str(form.get("session", "") or form.get("session_id", ""))
+        mode = str(form.get("mode", "chat"))
+    else:
+        try:
+            body = await request.json()
+            message = str(body.get("message", ""))
+            session_id = str(body.get("session", "") or body.get("session_id", ""))
+            mode = str(body.get("mode", "chat"))
+        except Exception:
+            form = await request.form()
+            message = str(form.get("message", ""))
+            session_id = str(form.get("session", "") or form.get("session_id", ""))
+            mode = str(form.get("mode", "chat"))
 
     if not session_id:
         session_id = _uid()
@@ -749,9 +773,9 @@ async def client_perf(request: Request):
 @app.post("/api/ai/name")
 async def ai_name_gen(request: Request):
     body = await request.json()
-    text = body.get("text", "")
+    text = body.get("name", body.get("text", ""))
     name = text[:40] if text else "New Chat"
-    return {"name": name}
+    return {"success": True, "name": name}
 
 
 @app.get("/api/ai/name")
@@ -810,7 +834,7 @@ async def preset_template_create(request: Request):
     templates.append(body)
     data["templates"] = templates
     _save_json(PRESETS_FILE, data)
-    return body
+    return {"success": True, **body}
 
 
 @app.delete("/api/presets/templates/{tid}")
@@ -834,13 +858,13 @@ async def preset_custom_save(request: Request):
     data = _load_json(PRESETS_FILE, {})
     data["custom"] = body
     _save_json(PRESETS_FILE, data)
-    return body
+    return {"success": True, **body}
 
 
 @app.post("/api/presets/expand")
 async def preset_expand(request: Request):
     body = await request.json()
-    return {"prompt": body.get("prompt", "")}
+    return {"success": True, "prompt": body.get("prompt", "")}
 
 
 @app.get("/api/presets/groups")
@@ -868,7 +892,12 @@ async def memory_create(request: Request):
 
 @app.put("/api/memory/{mid}")
 async def memory_update(mid: str, request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct or "x-www-form" in ct:
+        form = await request.form()
+        body = {k: str(v) for k, v in form.items()}
+    else:
+        body = await request.json()
     items = _load_json(MEMORY_FILE, [])
     for item in items:
         if item.get("id") == mid:
@@ -1006,7 +1035,7 @@ async def task_notifications():
 
 @app.get("/api/skills")
 async def skills_list():
-    return _load_json(DATA_DIR / "skills.json", [])
+    return {"skills": _load_json(DATA_DIR / "skills.json", [])}
 
 
 @app.post("/api/skills")
@@ -1120,7 +1149,7 @@ async def documents_library(q: str = ""):
     if q:
         q_lower = q.lower()
         docs = [d for d in docs if q_lower in d.get("title", "").lower() or q_lower in d.get("content", "").lower()]
-    return docs
+    return {"documents": docs, "total": len(docs)}
 
 
 @app.get("/api/documents/import-pdf")
@@ -1149,18 +1178,7 @@ async def save_editor_draft(request: Request):
 
 
 # ──────────────────── UPLOAD ────────────────────
-
-@app.post("/api/upload")
-async def upload_file(request: Request):
-    form = await request.form()
-    upload = form.get("file")
-    if upload and hasattr(upload, "filename"):
-        fid = _uid()
-        dest = UPLOADS_DIR / f"{fid}_{upload.filename}"
-        content = await upload.read()
-        dest.write_bytes(content)
-        return {"id": fid, "filename": upload.filename, "size": len(content), "url": f"/api/upload/{fid}"}
-    return JSONResponse({"error": "no file"}, status_code=400)
+# Upload endpoint is defined later in the MISSING ENDPOINTS section
 
 
 @app.get("/api/upload/{uid}")
@@ -1204,14 +1222,27 @@ async def gallery_image(iid: str):
 @app.get("/api/calendar/calendars")
 async def calendar_calendars():
     data = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
-    return data.get("calendars", []) if isinstance(data, dict) else []
+    cals = data.get("calendars", []) if isinstance(data, dict) else []
+    return {"calendars": cals}
 
 
 @app.post("/api/calendar/calendars")
 async def create_calendar(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        name = str(form.get("name", "Calendar"))
+        color = str(form.get("color", "#4a9eff"))
+    else:
+        try:
+            body = await request.json()
+            name = body.get("name", "Calendar")
+            color = body.get("color", "#4a9eff")
+        except Exception:
+            name = "Calendar"
+            color = "#4a9eff"
     data = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
-    cal = {"id": _uid(), "name": body.get("name", "Calendar"), "color": body.get("color", "#4a9eff"), "created_at": _now()}
+    cal = {"id": _uid(), "name": name, "color": color, "created_at": _now()}
     data.setdefault("calendars", []).append(cal)
     _save_json(CALENDAR_FILE, data)
     return cal
@@ -1219,7 +1250,15 @@ async def create_calendar(request: Request):
 
 @app.put("/api/calendar/calendars/{cid}")
 async def update_calendar(cid: str, request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: str(v) for k, v in form.items()}
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
     data = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
     for c in data.get("calendars", []):
         if c.get("id") == cid:
@@ -1239,7 +1278,8 @@ async def delete_calendar(cid: str):
 @app.get("/api/calendar/events")
 async def calendar_events(start: str = "", end: str = ""):
     data = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
-    return data.get("events", []) if isinstance(data, dict) else []
+    events = data.get("events", []) if isinstance(data, dict) else []
+    return {"events": events}
 
 
 @app.post("/api/calendar/events")
@@ -1325,6 +1365,30 @@ async def email_accounts():
 async def email_set_default(id: str):
     return JSONResponse({})
 
+@app.post("/api/email/accounts/test")
+async def email_accounts_test(request: Request):
+    return {"ok": False, "error": "Email testing not available in local mode", "imap": False, "smtp": False}
+
+@app.get("/api/email/oauth/google/authorize")
+async def email_oauth_google_authorize(account_id: str = ""):
+    return HTMLResponse("<html><body style='font-family:sans-serif;background:#282c34;color:#9cdef2;display:flex;align-items:center;justify-content:center;height:100vh;'><div>OAuth is not configured in local SAB mode.<br><br><a href='/login' style='color:#50fa7b;'>Return</a></div></body></html>")
+
+@app.get("/api/email/oauth/google/callback")
+async def email_oauth_google_callback(code: str = "", state: str = ""):
+    return HTMLResponse("<html><body style='font-family:sans-serif;background:#282c34;color:#9cdef2;display:flex;align-items:center;justify-content:center;height:100vh;'><div>OAuth callback received. Not configured in local mode.<br><br><a href='/login' style='color:#50fa7b;'>Return</a></div></body></html>")
+
+@app.post("/api/email/oauth/google")
+async def email_oauth_google(request: Request):
+    return {"ok": False, "error": "OAuth not configured in local mode"}
+
+@app.post("/api/email/reconnect")
+async def email_reconnect(request: Request):
+    return {"ok": False, "error": "Not applicable in local mode"}
+
+@app.post("/api/email/connect")
+async def email_connect(request: Request):
+    return {"ok": False, "error": "Not applicable in local mode"}
+
 
 @app.get("/api/email/config")
 async def email_config():
@@ -1356,7 +1420,7 @@ async def email_list(folder: str = "INBOX", limit: int = 50):
 
 @app.get("/api/email/folders")
 async def email_folders():
-    return []
+    return {"folders": []}
 
 
 @app.get("/api/email/read/{uid}")
@@ -1392,7 +1456,7 @@ async def email_cancel_scheduled(id: str):
 @app.post("/api/email/ai-reply")
 async def email_ai_reply(request: Request):
     body = await request.json()
-    return {"reply": f"AI reply to email {body.get('uid', '')}"}
+    return {"success": True, "reply": f"AI reply to email {body.get('uid', '')}"}
 
 
 @app.post("/api/email/summarize")
@@ -1457,12 +1521,12 @@ async def email_unflag_spam(uid: str):
 
 @app.get("/api/email/unread-state")
 async def email_unread_state():
-    return {"unread": 0}
+    return {"unread_count": 0, "max_uid": 0}
 
 
 @app.get("/api/email/urgency-state")
 async def email_urgency_state():
-    return {"urgent": 0}
+    return {"max_score": 0, "urgent_count": 0}
 
 
 @app.get("/api/email/attachment/{uid}/{index}")
@@ -1864,12 +1928,12 @@ async def cookbook_hf_gguf(repo: str = ""):
 
 @app.post("/api/cookbook/test-ssh")
 async def cookbook_test_ssh(request: Request):
-    return {"ok": False, "error": "SSH not configured"}
+    return {"ok": False, "exit_code": -1, "stdout": "", "stderr": "SSH not configured", "error": "SSH not configured"}
 
 
 @app.get("/api/cookbook/ssh-key")
 async def cookbook_ssh_key():
-    return {"key": ""}
+    return {"key": "", "public_key": ""}
 
 
 @app.post("/api/cookbook/ssh-key")
@@ -1879,7 +1943,7 @@ async def cookbook_gen_ssh_key():
 
 @app.post("/api/cookbook/setup")
 async def cookbook_setup(request: Request):
-    return {"ok": True, "status": "not applicable"}
+    return {"ok": True, "status": "not applicable", "platform": sys.platform}
 
 
 @app.get("/api/cookbook/ollama/library")
@@ -2002,14 +2066,26 @@ async def search(q: str = "", limit: int = 20):
 
 @app.post("/api/search")
 async def search_post(request: Request):
-    body = await request.json()
-    return await search(q=body.get("query", body.get("q", "")))
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        q = form.get("query", form.get("q", ""))
+    else:
+        body = await request.json()
+        q = body.get("query", body.get("q", ""))
+    return await search(q=str(q))
 
 
 @app.post("/api/search/query")
 async def search_query(request: Request):
-    body = await request.json()
-    return await search(q=body.get("query", body.get("q", "")))
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        q = form.get("query", form.get("q", ""))
+    else:
+        body = await request.json()
+        q = body.get("query", body.get("q", ""))
+    return await search(q=str(q))
 
 
 @app.get("/api/search/providers")
@@ -2060,7 +2136,12 @@ async def mcp_servers():
 
 @app.post("/api/mcp/servers")
 async def mcp_add(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     servers = _load_json(MCP_FILE, [])
     server = {"id": _uid(), "enabled": True, **body}
     servers.append(server)
@@ -2070,7 +2151,12 @@ async def mcp_add(request: Request):
 
 @app.patch("/api/mcp/servers/{id}")
 async def mcp_toggle(id: str, request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     servers = _load_json(MCP_FILE, [])
     for s in servers:
         if s.get("id") == id:
@@ -2098,7 +2184,8 @@ async def mcp_tools(id: str):
 
 
 @app.post("/api/mcp/servers/{id}/tools")
-async def mcp_tools_post(id: str, request: Request):
+@app.patch("/api/mcp/servers/{id}/tools")
+async def mcp_tools_update(id: str, request: Request):
     return JSONResponse({})
 
 
@@ -2116,7 +2203,12 @@ async def webhooks():
 
 @app.post("/api/webhooks")
 async def webhooks_create(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     hooks = _load_json(WEBHOOKS_FILE, [])
     hook = {"id": _uid(), "enabled": True, "created_at": _now(), **body}
     hooks.append(hook)
@@ -2157,7 +2249,12 @@ async def tokens():
 
 @app.post("/api/tokens")
 async def tokens_create(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     tokens_list = _load_json(TOKENS_FILE, [])
     token = {"id": _uid(), "created_at": _now(), "token": uuid.uuid4().hex[:32], **body}
     tokens_list.append(token)
@@ -2778,12 +2875,22 @@ async def memory_audit():
 
 @app.post("/api/memory/extract")
 async def memory_extract(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct or "x-www-form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     return {"ok": True, "memories": []}
 
 @app.post("/api/memory/import")
 async def memory_import(request: Request):
-    body = await request.json()
+    ct = request.headers.get("content-type", "")
+    if "form" in ct or "x-www-form" in ct:
+        form = await request.form()
+        body = {k: v for k, v in form.items()}
+    else:
+        body = await request.json()
     return {"ok": True, "imported": 0}
 
 @app.post("/api/memory/{mid}/pin")
@@ -2838,7 +2945,9 @@ async def skills_search(q: str = ""):
 
 @app.get("/api/skills/builtin/{name}")
 async def skills_builtin_get(name: str):
-    return {"name": name, "builtin": True, "description": "", "content": ""}
+    f = SKILLS_DIR / f"{name}.md"
+    content = f.read_text(encoding="utf-8") if f.exists() else ""
+    return {"name": name, "builtin": True, "description": "", "content": content, "text": content, "default": content}
 
 @app.post("/api/skills/builtin/{name}")
 async def skills_builtin_install(name: str):
@@ -2900,12 +3009,12 @@ async def skills_test_approval(name: str, request: Request):
 @app.post("/api/tasks/parse")
 async def tasks_parse(request: Request):
     body = await request.json()
-    text = body.get("text", "")
-    return {"tasks": [{"name": text, "priority": "medium"}] if text else []}
+    text = body.get("text", body.get("description", ""))
+    return {"success": True, "tasks": [{"name": text, "priority": "medium"}] if text else [], "draft": text}
 
 @app.get("/api/tasks/runs/recent")
 async def tasks_runs_recent():
-    return []
+    return {"runs": [], "has_more": False}
 
 @app.get("/api/tasks/meta/email-accounts")
 async def task_email_accounts():
@@ -3109,21 +3218,28 @@ async def fonts_custom():
     return []
 
 @app.get("/api/workspace/vet")
-async def workspace_vet():
-    return {"path": str(DATA_DIR.parent), "ok": True, "issues": []}
+async def workspace_vet(path: str = ""):
+    target = path if path else str(DATA_DIR.parent)
+    issues = []
+    if not os.path.exists(target):
+        issues.append({"level": "error", "message": f"Path does not exist: {target}"})
+    return {"path": target, "ok": len(issues) == 0, "issues": issues}
 
 @app.get("/api/workspace/browse")
-async def workspaceBrowse():
-    target = str(DATA_DIR.parent)
+async def workspaceBrowse(path: str = ""):
+    target = path if path else str(DATA_DIR.parent)
     dirs = []
+    files_list = []
     try:
         for entry in os.scandir(target):
             if entry.is_dir():
                 dirs.append({"name": entry.name, "path": entry.path})
+            elif entry.is_file():
+                files_list.append({"name": entry.name, "path": entry.path})
     except Exception:
         pass
     parent = str(Path(target).parent)
-    return {"path": target, "parent": parent, "dirs": dirs, "files": [], "truncated": False, "selectable": True}
+    return {"path": target, "parent": parent, "dirs": dirs, "files": files_list, "truncated": False, "selectable": True}
 
 @app.get("/api/ping")
 async def ping():
@@ -3232,6 +3348,108 @@ async def mcp_update_post(id: str, request: Request):
 async def compare_probe(request: Request):
     body = await request.json()
     return {"results": []}
+
+# ── Method aliases (frontend sends POST, server had GET, etc.) ──
+
+@app.post("/api/skills/search")
+async def skills_search_post(request: Request):
+    body = await request.json()
+    q = body.get("query", body.get("q", ""))
+    items = _load_json(DATA_DIR / "skills.json", [])
+    if q:
+        ql = q.lower()
+        items = [i for i in items if ql in str(i.get("name", "")).lower() or ql in str(i.get("description", "")).lower()]
+    return items
+
+@app.post("/api/skills/audit-all")
+async def skills_audit_all_post(request: Request):
+    return {"results": []}
+
+@app.put("/api/skills/builtin/{name}")
+async def skills_builtin_update(name: str, request: Request):
+    body = await request.json()
+    f = SKILLS_DIR / f"{name}.md"
+    f.write_text(body.get("text", body.get("content", "")), encoding="utf-8")
+    return {"ok": True}
+
+@app.post("/api/session/{sid}/message")
+async def session_inject_message(sid: str, request: Request):
+    body = await request.json()
+    history = _get_history(sid)
+    history.append({"role": body.get("role", "assistant"), "content": body.get("content", ""), "id": _uid()})
+    _save_history(sid, history)
+    return {"ok": True}
+
+@app.post("/api/skills/{name}/invoke")
+async def skills_invoke(name: str, request: Request):
+    return {"ok": True, "result": f"Skill {name} invoked"}
+
+# ── Calendar config accounts CRUD ──
+
+CALENDAR_ACCOUNTS_FILE = DATA_DIR / "calendar_accounts.json"
+
+@app.get("/api/calendar/config/accounts")
+async def calendar_config_accounts():
+    return _load_json(CALENDAR_ACCOUNTS_FILE, [])
+
+@app.post("/api/calendar/config/accounts")
+async def calendar_config_accounts_create(request: Request):
+    body = await request.json()
+    items = _load_json(CALENDAR_ACCOUNTS_FILE, [])
+    account = {"id": _uid(), "created_at": _now(), "enabled": True, **body}
+    items.append(account)
+    _save_json(CALENDAR_ACCOUNTS_FILE, items)
+    return account
+
+@app.put("/api/calendar/config/accounts/{aid}")
+async def calendar_config_accounts_update(aid: str, request: Request):
+    body = await request.json()
+    items = _load_json(CALENDAR_ACCOUNTS_FILE, [])
+    for item in items:
+        if item.get("id") == aid:
+            item.update(body)
+    _save_json(CALENDAR_ACCOUNTS_FILE, items)
+    return {"ok": True}
+
+@app.delete("/api/calendar/config/accounts/{aid}")
+async def calendar_config_accounts_delete(aid: str):
+    items = _load_json(CALENDAR_ACCOUNTS_FILE, [])
+    items = [i for i in items if i.get("id") != aid]
+    _save_json(CALENDAR_ACCOUNTS_FILE, items)
+    return {"ok": True}
+
+# ── Memory audit POST alias ──
+
+@app.post("/api/memory/audit")
+async def memory_audit_post(request: Request):
+    items = _load_json(MEMORY_FILE, [])
+    return {"count": len(items), "items": items}
+
+# ── Gallery download-zip POST alias ──
+
+@app.post("/api/gallery/download-zip")
+async def gallery_download_zip_post(request: Request):
+    return {"ok": True, "message": "ZIP download not available"}
+
+# ── Upload files key fallback ──
+
+@app.post("/api/upload")
+async def upload_file(request: Request):
+    form = await request.form()
+    upload = form.get("file") or (form.get("files") if hasattr(form, "get") else None)
+    if not upload or not hasattr(upload, "filename"):
+        for key in form:
+            val = form[key]
+            if hasattr(val, "filename") and val.filename:
+                upload = val
+                break
+    if upload and hasattr(upload, "filename"):
+        fid = _uid()
+        dest = UPLOADS_DIR / f"{fid}_{upload.filename}"
+        content = await upload.read()
+        dest.write_bytes(content)
+        return {"id": fid, "filename": upload.filename, "size": len(content), "url": f"/api/upload/{fid}", "files": [{"id": fid, "filename": upload.filename, "size": len(content), "url": f"/api/upload/{fid}"}]}
+    return JSONResponse({"error": "no file"}, status_code=400)
 
 
 
