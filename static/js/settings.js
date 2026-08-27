@@ -1603,8 +1603,8 @@ function initAppearance() {
   modalEl.querySelectorAll('[data-privacy-key]').forEach(function(chk) {
     chk.addEventListener('change', function() {
       if (chk.dataset.privacyKey !== 'sensitive-blur') return;
-      localStorage.setItem('sabsabsa-sensitive-blur', chk.checked ? 'on' : 'off');
-      window.dispatchEvent(new CustomEvent('sabsabsa-sensitive-blur-change', {
+      localStorage.setItem('sab-sensitive-blur', chk.checked ? 'on' : 'off');
+      window.dispatchEvent(new CustomEvent('sab-sensitive-blur-change', {
         detail: { enabled: chk.checked }
       }));
     });
@@ -1642,7 +1642,7 @@ function syncAppearanceCheckboxes() {
 
 function syncPrivacyCheckboxes() {
   modalEl.querySelectorAll('[data-privacy-key="sensitive-blur"]').forEach(function(chk) {
-    chk.checked = localStorage.getItem('sabsabsa-sensitive-blur') === 'on';
+    chk.checked = localStorage.getItem('sab-sensitive-blur') === 'on';
   });
 }
 
@@ -1930,7 +1930,7 @@ async function initShortcuts() {
     try {
       await _postSettings({ keybinds });
       // Update global keybinds so they take effect immediately
-      window._sabsabsaKeybinds = keybinds;
+      window._sabKeybinds = keybinds;
       if (uiModule && uiModule.showToast) uiModule.showToast('Shortcut saved');
     } catch (e) {
       console.error('Failed to save keybinds:', e);
@@ -2119,12 +2119,12 @@ function initAccount() {
       // SECURITY: wipe all client-side state on logout so the next user that
       // signs in on this browser doesn't inherit the previous account's
       // session id, last-used model, draft chat input, or any cached lists.
-      // Keep "sabsabsa-last-user" so the login form remembers the username
+      // Keep "sab-last-user" so the login form remembers the username
       // (if "Remember me" was on). Without this the chat composer pre-loaded
       // the previous user's last model into a fresh session, which read as
       // cross-account leakage.
       try {
-        const _keepKeys = new Set(['sabsabsa-last-user']);
+        const _keepKeys = new Set(['sab-last-user']);
         const _toRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
@@ -2198,7 +2198,7 @@ function initAll() {
 
 function notifyIntegrationsChanged() {
   try {
-    window.dispatchEvent(new CustomEvent('sabsabsa-integrations-changed'));
+    window.dispatchEvent(new CustomEvent('sab-integrations-changed'));
   } catch (_) {}
 }
 
@@ -2427,7 +2427,7 @@ async function initReminderSettings() {
   // regardless of channel). The hint should make that clear so
   // users don't think they have to choose between channels.
   const CHANNEL_HINTS = {
-    browser: 'Reminders appear as browser notifications inside Sabsabsa.',
+    browser: 'Reminders appear as browser notifications inside SAB.',
     email: 'Reminders are emailed and shown as a browser notification.',
     ntfy: 'Reminders are pushed via ntfy AND shown as a browser notification.',
     webhook: 'Reminders are POSTed to the selected integration AND shown as a browser notification. Use {{title}} and {{message}} in the payload template.',
@@ -2436,7 +2436,7 @@ async function initReminderSettings() {
   applyReminderChannelAvailability();
   if (!channelSel.dataset.integrationRefreshWired) {
     channelSel.dataset.integrationRefreshWired = '1';
-    window.addEventListener('sabsabsa-integrations-changed', () => {
+    window.addEventListener('sab-integrations-changed', () => {
       refreshReminderChannelAvailability().catch(e => console.warn('Failed to refresh reminder channels', e));
     });
   }
@@ -2529,7 +2529,7 @@ async function initReminderSettings() {
     save({ reminder_channel: channelSel.value });
     // Email reminder bell visibility tracks this — broadcast so the
     // email library can re-evaluate without waiting for a re-open.
-    try { window.dispatchEvent(new CustomEvent('sabsabsa-reminder-channel-changed', { detail: { channel: channelSel.value } })); } catch (_) {}
+    try { window.dispatchEvent(new CustomEvent('sab-reminder-channel-changed', { detail: { channel: channelSel.value } })); } catch (_) {}
   });
   if (emailToIn) {
     let emailDebounce;
@@ -2833,7 +2833,7 @@ async function initEmailAccountsSettings() {
     const eafProviderNotes = {
       outlook: {
         title: 'Outlook / Office 365 needs OAuth',
-        body: 'Microsoft disables normal password login for IMAP/SMTP in most Outlook and Microsoft 365 accounts. Sabsabsa does not support Microsoft OAuth/Graph mail yet, so this preset is only a placeholder for future support.',
+        body: 'Microsoft disables normal password login for IMAP/SMTP in most Outlook and Microsoft 365 accounts. SAB does not support Microsoft OAuth/Graph mail yet, so this preset is only a placeholder for future support.',
       },
     };
     const eafNoteEl = el('eaf-provider-note');
@@ -2968,12 +2968,12 @@ async function initEmailSettings() {
   if (!root || !root.querySelector('[data-settings-panel="email"]')) return;
 
   const styleKey = () => {
-    const account = String(window.__sabsabsaActiveEmailAccount || '').trim();
-    return account ? `sabsabsa-email-writing-style:${account}` : 'sabsabsa-email-writing-style';
+    const account = String(window.__sabActiveEmailAccount || '').trim();
+    return account ? `sab-email-writing-style:${account}` : 'sab-email-writing-style';
   };
   const styleEl = el('set-email-style');
   const emailAccountSuffix = () => {
-    const account = String(window.__sabsabsaActiveEmailAccount || '').trim();
+    const account = String(window.__sabActiveEmailAccount || '').trim();
     return account ? `?account_id=${encodeURIComponent(account)}` : '';
   };
 
@@ -3378,11 +3378,11 @@ const AGENT_CONFIGS = {
     defaultName: 'Codex Agent',
     pluginPath: '/api/codex/plugin.zip',
     setupDescription: 'Downloads a plugin bundle and registers it.',
-    buildSetup: (origin, token) => `export SABSABSA_URL=${origin}
-export SABSABSA_API_TOKEN='${token}'
+    buildSetup: (origin, token) => `export SAB_URL=${origin}
+export SAB_API_TOKEN='${token}'
 mkdir -p ~/plugins
-curl -fsSL -H "Authorization: Bearer $SABSABSA_API_TOKEN" "$SABSABSA_URL/api/codex/plugin.zip" -o /tmp/sabsabsa-codex-plugin.zip
-python3 -m zipfile -e /tmp/sabsabsa-codex-plugin.zip ~/plugins
+curl -fsSL -H "Authorization: Bearer $SAB_API_TOKEN" "$SAB_URL/api/codex/plugin.zip" -o /tmp/sab-codex-plugin.zip
+python3 -m zipfile -e /tmp/sab-codex-plugin.zip ~/plugins
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -3398,16 +3398,16 @@ data.setdefault("name", "personal")
 data.setdefault("interface", {}).setdefault("displayName", "Personal")
 plugins = data.setdefault("plugins", [])
 entry = {
-    "name": "sabsabsa",
-    "source": {"source": "local", "path": "./plugins/sabsabsa"},
+    "name": "sab",
+    "source": {"source": "local", "path": "./plugins/sab"},
     "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
     "category": "Productivity",
 }
-data["plugins"] = [item for item in plugins if item.get("name") != "sabsabsa"] + [entry]
+data["plugins"] = [item for item in plugins if item.get("name") != "sab"] + [entry]
 p.write_text(json.dumps(data, indent=2) + "\\n")
 PY
-codex plugin add sabsabsa@personal
-python3 ~/plugins/sabsabsa/scripts/sabsabsa_api.py capabilities`,
+codex plugin add sab@personal
+python3 ~/plugins/sab/scripts/sab_api.py capabilities`,
   },
   claude: {
     label: 'Claude Agent',
@@ -3416,12 +3416,12 @@ python3 ~/plugins/sabsabsa/scripts/sabsabsa_api.py capabilities`,
     defaultName: 'Claude Agent',
     pluginPath: '/api/claude/plugin.zip',
     setupDescription: 'Downloads a plugin bundle and registers it.',
-    buildSetup: (origin, token) => `export SABSABSA_URL=${origin}
-export SABSABSA_API_TOKEN='${token}'
+    buildSetup: (origin, token) => `export SAB_URL=${origin}
+export SAB_API_TOKEN='${token}'
 mkdir -p ~/.claude
-curl -fsSL -H "Authorization: Bearer $SABSABSA_API_TOKEN" "$SABSABSA_URL/api/claude/plugin.zip" -o /tmp/sabsabsa-claude-skill.zip
-python3 -m zipfile -e /tmp/sabsabsa-claude-skill.zip ~/.claude/
-python3 ~/.claude/skills/sabsabsa/scripts/sabsabsa_api.py capabilities`,
+curl -fsSL -H "Authorization: Bearer $SAB_API_TOKEN" "$SAB_URL/api/claude/plugin.zip" -o /tmp/sab-claude-skill.zip
+python3 -m zipfile -e /tmp/sab-claude-skill.zip ~/.claude/
+python3 ~/.claude/skills/sab/scripts/sab_api.py capabilities`,
   },
 };
 
@@ -3760,7 +3760,7 @@ async function initUnifiedIntegrations() {
       if (ntfyHint) {
         ntfyHint.style.display = isNtfy ? 'block' : 'none';
         if (isNtfy) {
-          ntfyHint.innerHTML = 'Enter the ntfy server URL Sabsabsa can reach. Examples: <code>http://127.0.0.1:8091</code>, <code>http://100.x.y.z:8091</code>, or <code>https://ntfy.example.com</code>.';
+          ntfyHint.innerHTML = 'Enter the ntfy server URL SAB can reach. Examples: <code>http://127.0.0.1:8091</code>, <code>http://100.x.y.z:8091</code>, or <code>https://ntfy.example.com</code>.';
         }
       }
       if (url) {
@@ -4040,7 +4040,7 @@ async function initUnifiedIntegrations() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = format === 'csv' ? 'sabsabsa-contacts.csv' : 'sabsabsa-contacts.vcf';
+        a.download = format === 'csv' ? 'sab-contacts.csv' : 'sab-contacts.vcf';
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -4360,7 +4360,7 @@ async function initUnifiedIntegrations() {
       },
       outlook: {
         title: 'Outlook / Office 365 needs OAuth',
-        body: 'Microsoft disables normal password login for IMAP/SMTP in most Outlook and Microsoft 365 accounts. Sabsabsa does not support Microsoft OAuth/Graph mail yet, so this preset is only a placeholder for future support.',
+        body: 'Microsoft disables normal password login for IMAP/SMTP in most Outlook and Microsoft 365 accounts. SAB does not support Microsoft OAuth/Graph mail yet, so this preset is only a placeholder for future support.',
         url: 'https://learn.microsoft.com/exchange/clients-and-mobile-in-exchange-online/disable-basic-authentication-in-exchange-online',
         linkLabel: 'Read Microsoft note',
       },
@@ -5180,7 +5180,7 @@ async function initUnifiedIntegrations() {
               </button>
             </div>
             <div id="uf-codex-config-body" style="display:none;">
-              <div style="font-size:11px;opacity:0.62;margin:4px 0 6px;">Toggle which Sabsabsa tools this agent can use. New agents start with chat only.</div>
+              <div style="font-size:11px;opacity:0.62;margin:4px 0 6px;">Toggle which SAB tools this agent can use. New agents start with chat only.</div>
               <div id="uf-codex-inline-scopes"></div>
             </div>
           </div>

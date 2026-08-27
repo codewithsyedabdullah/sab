@@ -1568,12 +1568,12 @@ async def email_compose_from_attachment(uid: str, index: int):
     return JSONResponse({})
 
 
-@app.post("/api/email/compose-from-sabsabsa")
+@app.post("/api/email/compose-from-sab")
 async def email_compose_from_doc(request: Request):
     return JSONResponse({})
 
 
-@app.post("/api/email/compose-from-sabsabsa-zip")
+@app.post("/api/email/compose-from-sab-zip")
 async def email_compose_from_doc_zip(request: Request):
     return JSONResponse({})
 
@@ -1583,7 +1583,7 @@ async def email_inline_image(uid: str):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
-@app.get("/api/email/sabsabsa/reminders")
+@app.get("/api/email/sab/reminders")
 async def email_reminders():
     return []
 

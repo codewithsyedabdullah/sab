@@ -15,7 +15,7 @@ import documentModule from './document.js?v=20260815approvalsave1';
 // button is polymorphic: with an empty composer it can mean New chat or Record
 // voice instead of Send. Intercept only the programmatic approval click and
 // route it through the form submit path, which already reaches chat.js directly.
-document.addEventListener('sabsabsa:tool-approval', () => {
+document.addEventListener('sab:tool-approval', () => {
   const sendButton = document.querySelector('.send-btn');
   const chatForm = document.getElementById('chat-form');
   if (!sendButton || !chatForm) return;
@@ -136,15 +136,15 @@ export function handleUIControl(uiData) {
       }
 
     } else if (uiEvent === 'highlight' || uiData.ui_event === 'highlight') {
-      document.querySelectorAll('.sabsabsa-highlight').forEach(function(e) { e.classList.remove('sabsabsa-highlight'); });
-      document.querySelectorAll('.sabsabsa-hl-label').forEach(function(e) { e.remove(); });
+      document.querySelectorAll('.sab-highlight').forEach(function(e) { e.classList.remove('sab-highlight'); });
+      document.querySelectorAll('.sab-hl-label').forEach(function(e) { e.remove(); });
       var target = document.querySelector(uiData.selector);
       if (target) {
-        target.classList.add('sabsabsa-highlight');
+        target.classList.add('sab-highlight');
         target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         if (uiData.label) {
           var lbl = document.createElement('div');
-          lbl.className = 'sabsabsa-hl-label';
+          lbl.className = 'sab-hl-label';
           lbl.textContent = uiData.label;
           if (!target.style.position) target.style.position = 'relative';
           target.appendChild(lbl);
@@ -152,8 +152,8 @@ export function handleUIControl(uiData) {
       }
 
     } else if (uiEvent === 'clear_highlight' || uiData.ui_event === 'clear_highlight') {
-      document.querySelectorAll('.sabsabsa-highlight').forEach(function(e) { e.classList.remove('sabsabsa-highlight'); });
-      document.querySelectorAll('.sabsabsa-hl-label').forEach(function(e) { e.remove(); });
+      document.querySelectorAll('.sab-highlight').forEach(function(e) { e.classList.remove('sab-highlight'); });
+      document.querySelectorAll('.sab-hl-label').forEach(function(e) { e.remove(); });
 
     } else if (uiEvent === 'research_started' || uiData.ui_event === 'research_started') {
       // Agent kicked off deep research — adopt the session into the

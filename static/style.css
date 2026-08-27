@@ -1,5 +1,5 @@
 /* ============================================ */
-/* Sabsabsa UI — Consolidated Stylesheet        */
+/* SAB UI — Consolidated Stylesheet        */
 /* ============================================ */
 
 
@@ -6453,7 +6453,7 @@ body.bg-pattern-sparkles {
     /* (legacy toolbar-toggle styles removed — now using .vis-* classes) */
 
     /* Demo highlight pulse */
-    .sabsabsa-highlight {
+    .sab-highlight {
       outline: 2px solid var(--accent, var(--red)) !important;
       outline-offset: 1px;
       box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, var(--red)) 18%, transparent);
@@ -6581,7 +6581,7 @@ body.bg-pattern-sparkles {
     @media (prefers-reduced-motion: reduce) {
       .th-cursor, .th-modal-group, .th-zone { animation: none !important; }
     }
-    .sabsabsa-hl-label {
+    .sab-hl-label {
       position: absolute;
       top: -22px;
       left: 8px;
@@ -23875,7 +23875,7 @@ body.gallery-selecting .gallery-dl-btn,
 
 /* Welcome name — left-to-right wipe with a touch of horizontal stretch.
    Fires on initial render via the .welcome-name rule; restarts on Nobody⇄
-   Sabsabsa toggle via JS reflow trick. */
+   SAB toggle via JS reflow trick. */
 .welcome-name {
   transform-origin: left center;
   animation: welcome-name-reveal 0.55s cubic-bezier(0.34, 1.32, 0.55, 1) both;
@@ -33006,7 +33006,7 @@ body.doc-find-active mark.doc-find-mark.current {
 }
 .email-compose-chip .compose-chip-remove:hover { opacity: 1; color: var(--red, #e55); }
 
-.email-sabsabsa-attach-menu {
+.email-sab-attach-menu {
   position: fixed;
   z-index: 10050;
   width: 300px;
@@ -33020,7 +33020,7 @@ body.doc-find-active mark.doc-find-mark.current {
   box-shadow: 0 12px 30px rgba(0,0,0,0.28);
   overflow: hidden;
 }
-.email-sabsabsa-attach-local {
+.email-sab-attach-local {
   width: 100%;
   height: 30px;
   display: flex;
@@ -33035,17 +33035,17 @@ body.doc-find-active mark.doc-find-mark.current {
   font-size: 11px;
   cursor: pointer;
 }
-.email-sabsabsa-attach-local:hover {
+.email-sab-attach-local:hover {
   background: color-mix(in srgb, var(--accent-primary, var(--red)) 16%, transparent);
   border-color: color-mix(in srgb, var(--accent-primary, var(--red)) 55%, var(--border));
 }
-.email-sabsabsa-attach-tabs {
+.email-sab-attach-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 5px;
   margin: 7px 0;
 }
-.email-sabsabsa-attach-tabs button {
+.email-sab-attach-tabs button {
   height: 26px;
   display: inline-flex;
   align-items: center;
@@ -33060,16 +33060,16 @@ body.doc-find-active mark.doc-find-mark.current {
   font-size: 11px;
   cursor: pointer;
 }
-.email-sabsabsa-attach-tabs button.active {
+.email-sab-attach-tabs button.active {
   opacity: 1;
   color: var(--accent-primary, var(--red));
   border-color: color-mix(in srgb, var(--accent-primary, var(--red)) 45%, var(--border));
   background: color-mix(in srgb, var(--accent-primary, var(--red)) 8%, transparent);
 }
-.email-sabsabsa-attach-tabs button svg {
+.email-sab-attach-tabs button svg {
   flex-shrink: 0;
 }
-.email-sabsabsa-attach-search-wrap {
+.email-sab-attach-search-wrap {
   height: 28px;
   display: flex;
   align-items: center;
@@ -33081,12 +33081,12 @@ body.doc-find-active mark.doc-find-mark.current {
   background: color-mix(in srgb, var(--fg) 3%, transparent);
   color: color-mix(in srgb, var(--fg) 48%, transparent);
 }
-.email-sabsabsa-attach-search-wrap:focus-within {
+.email-sab-attach-search-wrap:focus-within {
   border-color: color-mix(in srgb, var(--accent-primary, var(--red)) 45%, var(--border));
   color: var(--accent-primary, var(--red));
   background: color-mix(in srgb, var(--accent-primary, var(--red)) 6%, transparent);
 }
-.email-sabsabsa-attach-search {
+.email-sab-attach-search {
   min-width: 0;
   flex: 1;
   border: 0;
@@ -33096,17 +33096,17 @@ body.doc-find-active mark.doc-find-mark.current {
   font: inherit;
   font-size: 11px;
 }
-.email-sabsabsa-attach-search::placeholder {
+.email-sab-attach-search::placeholder {
   color: color-mix(in srgb, var(--fg) 38%, transparent);
 }
-.email-sabsabsa-attach-list {
+.email-sab-attach-list {
   max-height: 320px;
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.email-sabsabsa-attach-row {
+.email-sab-attach-row {
   width: 100%;
   min-height: 38px;
   display: flex;
@@ -33121,15 +33121,15 @@ body.doc-find-active mark.doc-find-mark.current {
   font: inherit;
   cursor: pointer;
 }
-.email-sabsabsa-attach-row:hover {
+.email-sab-attach-row:hover {
   background: var(--hover-bg, rgba(255,255,255,0.06));
   border-color: var(--border);
 }
-.email-sabsabsa-attach-row.is-selected {
+.email-sab-attach-row.is-selected {
   background: color-mix(in srgb, var(--accent-primary, var(--red)) 10%, transparent);
   border-color: color-mix(in srgb, var(--accent-primary, var(--red)) 45%, var(--border));
 }
-.email-sabsabsa-attach-dot {
+.email-sab-attach-dot {
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
@@ -33138,13 +33138,13 @@ body.doc-find-active mark.doc-find-mark.current {
   border-radius: 50%;
   background: color-mix(in srgb, var(--fg) 4%, transparent);
 }
-.email-sabsabsa-attach-row.is-selected .email-sabsabsa-attach-dot {
+.email-sab-attach-row.is-selected .email-sab-attach-dot {
   border-color: var(--accent-primary, var(--red));
   background: var(--accent-primary, var(--red));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary, var(--red)) 18%, transparent);
 }
-.email-sabsabsa-attach-icon,
-.email-sabsabsa-attach-thumb {
+.email-sab-attach-icon,
+.email-sab-attach-thumb {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
@@ -33155,42 +33155,42 @@ body.doc-find-active mark.doc-find-mark.current {
   background: color-mix(in srgb, var(--fg) 7%, transparent);
   overflow: hidden;
 }
-.email-sabsabsa-attach-thumb img {
+.email-sab-attach-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.email-sabsabsa-attach-main {
+.email-sab-attach-main {
   min-width: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.email-sabsabsa-attach-title,
-.email-sabsabsa-attach-meta {
+.email-sab-attach-title,
+.email-sab-attach-meta {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.email-sabsabsa-attach-title {
+.email-sab-attach-title {
   font-size: 11px;
   line-height: 1.2;
 }
-.email-sabsabsa-attach-meta {
+.email-sab-attach-meta {
   font-size: 10px;
   line-height: 1.15;
   opacity: 0.52;
 }
-.email-sabsabsa-attach-empty {
+.email-sab-attach-empty {
   padding: 14px 8px;
   color: var(--muted, #888);
   font-size: 11px;
   text-align: center;
 }
-.email-sabsabsa-attach-actions {
+.email-sab-attach-actions {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -33201,13 +33201,13 @@ body.doc-find-active mark.doc-find-mark.current {
   position: sticky;
   bottom: 0;
 }
-.email-sabsabsa-attach-count {
+.email-sab-attach-count {
   flex: 1;
   min-width: 0;
   color: var(--muted, #888);
   font-size: 11px;
 }
-.email-sabsabsa-attach-selected {
+.email-sab-attach-selected {
   height: 28px;
   min-width: 72px;
   padding: 0 12px;
@@ -33223,19 +33223,19 @@ body.doc-find-active mark.doc-find-mark.current {
   font-size: 11px;
   cursor: pointer;
 }
-.email-sabsabsa-attach-selected svg {
+.email-sab-attach-selected svg {
   flex-shrink: 0;
 }
-.email-sabsabsa-attach-selected:disabled {
+.email-sab-attach-selected:disabled {
   opacity: 0.45;
   cursor: default;
 }
-.email-sabsabsa-attach-selected.is-loading {
+.email-sab-attach-selected.is-loading {
   opacity: 0.72;
   pointer-events: none;
 }
 @media (max-width: 768px) {
-  .email-sabsabsa-attach-menu {
+  .email-sab-attach-menu {
     left: 8px !important;
     right: 8px;
     bottom: 8px;
@@ -33243,7 +33243,7 @@ body.doc-find-active mark.doc-find-mark.current {
     width: auto;
     max-height: 58vh;
   }
-  .email-sabsabsa-attach-list {
+  .email-sab-attach-list {
     max-height: calc(58vh - 88px);
   }
 }

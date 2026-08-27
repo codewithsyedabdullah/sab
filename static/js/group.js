@@ -19,7 +19,7 @@ let _abortControllers = [];
 let _mode = 'round-robin';    // 'parallel' or 'round-robin'
 let _roundRobinIdx = 0;
 let _parentSessionId = null;
-const GROUP_STATE_KEY = 'sabsabsa-group-state';
+const GROUP_STATE_KEY = 'sab-group-state';
 
 export function init(apiBase) {
   API_BASE = apiBase;
@@ -609,9 +609,9 @@ export async function startGroup(models, parentSessionId) {
     _parentSessionId = pdata.id;
     // Register as group session for sidebar icon
     try {
-      const storedGroupSessions = Storage.getJSON('sabsabsa-group-sessions', []);
+      const storedGroupSessions = Storage.getJSON('sab-group-sessions', []);
       const gids = Array.isArray(storedGroupSessions) ? storedGroupSessions : [];
-      if (!gids.includes(_parentSessionId)) { gids.push(_parentSessionId); localStorage.setItem('sabsabsa-group-sessions', JSON.stringify(gids)); }
+      if (!gids.includes(_parentSessionId)) { gids.push(_parentSessionId); localStorage.setItem('sab-group-sessions', JSON.stringify(gids)); }
     } catch (e) {}
   } catch (e) {
     console.error('[group] Failed to create parent session:', e);
@@ -886,7 +886,7 @@ async function _streamToHolder(modelIdx, sessionId, msg, holderEl, abortCtrl) {
             );
             uiModule.scrollHistory();
           }
-          // Text delta (Sabsabsa format)
+          // Text delta (SAB format)
           else if (json.delta !== undefined) {
             if (_firstToken) { _firstToken = false; if (holderEl._spinner) { holderEl._spinner.destroy(); delete holderEl._spinner; } bodyEl.innerHTML = ''; }
             // Handle thinking tags from vLLM

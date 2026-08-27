@@ -32,8 +32,8 @@ export const THEMES = {
 };
 
 const DEFAULT_THEME = 'dark';
-const LS_KEY = 'sabsabsa-theme';
-const CUSTOM_THEMES_KEY = 'sabsabsa-custom-themes';
+const LS_KEY = 'sab-theme';
+const CUSTOM_THEMES_KEY = 'sab-custom-themes';
 
 const FONT_MAP = {
   mono: "'Fira Code', monospace",
@@ -391,7 +391,7 @@ export function applyFontDensity(font, density) {
 // UI text-size scale (accessibility). Global and independent of the active
 // theme, so the chosen size persists across theme switches. Stored as a plain
 // percentage string ('100' | '110' | '125' | '150').
-const UI_SCALE_KEY = 'sabsabsa-ui-scale';
+const UI_SCALE_KEY = 'sab-ui-scale';
 const DEFAULT_UI_SCALE = '100';
 
 export function applyUiScale(scale) {
@@ -1287,7 +1287,7 @@ export function initThemeUI() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'sabsabsa_' + (obj.name || 'theme') + '.json';
+      a.download = 'sab_' + (obj.name || 'theme') + '.json';
       a.click();
       URL.revokeObjectURL(url);
       newExp.innerHTML = '&#x2713; Downloaded!';

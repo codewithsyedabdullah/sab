@@ -25,7 +25,7 @@ let _activeFilter = null; // null | 'default' | 'reminders' | 'no-reminders'
 // state the next click should land on after passing through null.
 let _reminderChipNext = 'reminders';
 let _searchQuery = '';
-let _viewMode = (typeof localStorage !== 'undefined' && localStorage.getItem('sabsabsa-notes-view')) || 'list'; // 'list' or 'grid'
+let _viewMode = (typeof localStorage !== 'undefined' && localStorage.getItem('sab-notes-view')) || 'list'; // 'list' or 'grid'
 let _showingArchived = false;
 let _selectMode = false;
 let _reminderTimer = null;
@@ -36,18 +36,18 @@ let _notesKeydownHandler = null;
 // Capture-phase "Esc cancels select mode" listener on document — tracked so it
 // is removed on close instead of leaking +1 per panel open/close cycle.
 let _notesSelectEscHandler = null;
-const REMINDER_FIRED_KEY = 'sabsabsa-notes-reminder-fired';
+const REMINDER_FIRED_KEY = 'sab-notes-reminder-fired';
 // Note IDs already shown with the entry-glow once. Re-set when the user
 // reschedules the reminder so the new firing glows again on next open.
-const REMINDER_GLOWED_KEY = 'sabsabsa-notes-reminder-glowed';
+const REMINDER_GLOWED_KEY = 'sab-notes-reminder-glowed';
 // IDs of notes whose reminders fired while the notes panel was closed. On the
 // next open of the panel we briefly glow those cards so the user can spot them.
-const REMINDER_PENDING_HIGHLIGHT_KEY = 'sabsabsa-notes-reminder-pending-highlight';
-const REMINDER_ACTIVE_HIGHLIGHT_KEY = 'sabsabsa-notes-reminder-active-highlight';
+const REMINDER_PENDING_HIGHLIGHT_KEY = 'sab-notes-reminder-pending-highlight';
+const REMINDER_ACTIVE_HIGHLIGHT_KEY = 'sab-notes-reminder-active-highlight';
 // Timestamp of the last time the user opened the notes panel — used to gate
 // the rail "fired" badge so old reminders don't re-fire on every page reload.
-const REMINDER_DISMISSED_AT_KEY = 'sabsabsa-notes-reminder-dismissed-at';
-const NOTES_FIRST_OPEN_HINT_KEY = 'sabsabsa-notes-first-open-hint-v1';
+const REMINDER_DISMISSED_AT_KEY = 'sab-notes-reminder-dismissed-at';
+const NOTES_FIRST_OPEN_HINT_KEY = 'sab-notes-first-open-hint-v1';
 
 function _forceCloseNotesPanel() {
   _open = false;
@@ -213,7 +213,7 @@ function _bringNotesToFront(pane = document.getElementById('notes-pane')) {
   const z = _topToolWindowZ(backdrop) + 1;
   if (backdrop) backdrop.style.setProperty('z-index', String(z), 'important');
   try {
-    window.dispatchEvent(new CustomEvent('sabsabsa:modal-opened', {
+    window.dispatchEvent(new CustomEvent('sab:modal-opened', {
       detail: { id: 'notes-panel', modal: pane },
     }));
   } catch (_) {}
@@ -1318,7 +1318,7 @@ export function openPanel() {
     requestAnimationFrame(() => _applyMasonry(document.querySelector('#notes-pane .notes-pane-body')));
     viewBtn.addEventListener('click', () => {
       _viewMode = _viewMode === 'grid' ? 'list' : 'grid';
-      try { localStorage.setItem('sabsabsa-notes-view', _viewMode); } catch {}
+      try { localStorage.setItem('sab-notes-view', _viewMode); } catch {}
       pane.classList.toggle('notes-view-grid', _viewMode === 'grid');
       _setViewLabel();
       requestAnimationFrame(() => _applyMasonry(document.querySelector('#notes-pane .notes-pane-body')));
@@ -2851,7 +2851,7 @@ function _bindCardEvents(body) {
 // tab closes, or the page reloads before Save is hit, reopening that note
 // restores the unsaved text. Drafts are cleared on an explicit Save or
 // Cancel. Survives offline because it never touches the network.
-const _DRAFT_PREFIX = 'sabsabsa-note-draft-';
+const _DRAFT_PREFIX = 'sab-note-draft-';
 function _draftKey(id) { return _DRAFT_PREFIX + (id || '__new__'); }
 function _loadDraft(id) {
   try { return JSON.parse(localStorage.getItem(_draftKey(id)) || 'null'); } catch { return null; }

@@ -3,8 +3,8 @@
 
 // ── Key constants ──
 export const KEYS = {
-  THEME: 'sabsabsa-theme',
-  TOGGLES: 'sabsabsa-toggles',
+  THEME: 'sab-theme',
+  TOGGLES: 'sab-toggles',
   SIDEBAR_COLLAPSED: 'sidebar-collapsed',
   SIDEBAR_WIDTH: 'sidebar-width',
   SIDEBAR_SIDE: 'sidebar-side',
@@ -13,19 +13,19 @@ export const KEYS = {
   COMPARE_CHAT: 'compare-continue-chat',
   COMPARE_BLIND: 'compare-blind',
   COMPARE_RANDOM: 'compare-randomize',
-  MODELS_EXPANDED: 'sabsabsa-model-expanded',
-  MODEL_ENDPOINTS: 'sabsabsa-model-endpoints',
-  MODEL_SELECTED: 'sabsabsa-selected-model',
-  SORT_ORDER: 'sabsabsa-sessions-sort',
-  CHAT_SEARCH_SCOPE: 'sabsabsa-search-scope',
-  INCOGNITO: 'sabsabsa-incognito',
-  RAG_ACTIVE: 'sabsabsa-rag-active',
-  MCP_ACTIVE: 'sabsabsa-mcp-active',
+  MODELS_EXPANDED: 'sab-model-expanded',
+  MODEL_ENDPOINTS: 'sab-model-endpoints',
+  MODEL_SELECTED: 'sab-selected-model',
+  SORT_ORDER: 'sab-sessions-sort',
+  CHAT_SEARCH_SCOPE: 'sab-search-scope',
+  INCOGNITO: 'sab-incognito',
+  RAG_ACTIVE: 'sab-rag-active',
+  MCP_ACTIVE: 'sab-mcp-active',
   SECTION_ORDER: 'sidebar-section-order',
   ADMIN_LAST_TAB: 'admin-last-tab',
-  DENSITY: 'sabsabsa-density',
-  UI_SCALE: 'sabsabsa-ui-scale',
-  WORKSPACE: 'sabsabsa-workspace'
+  DENSITY: 'sab-density',
+  UI_SCALE: 'sab-ui-scale',
+  WORKSPACE: 'sab-workspace'
 };
 
 /**

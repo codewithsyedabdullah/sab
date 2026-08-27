@@ -11,14 +11,50 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Disable iOS / Android auto-linkifying of numbers (phone/date/address)
        in email bodies — was wrapping random digits in <a href="tel:..."> with
-       browser-default styling that didn't match the Sabsabsa theme. -->
+       browser-default styling that didn't match the SAB theme. -->
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <script nonce="{{CSP_NONCE}}">
-  window._sabsabsaLoadTime = Date.now();
+  /* SAB rebrand migration: copy any legacy `sabsabsa*` localStorage / sessionStorage keys to their `sab*` counterparts before the app reads them. Safe no-op when nothing is stored. */
+  (function () {
+    function migrate(store) {
+      try {
+        var keysToCopy = [];
+        for (var i = 0; i < store.length; i++) {
+          var k = store.key(i);
+          if (!k) continue;
+          var nk = null;
+          if (k.indexOf('email-sabsabsa-') === 0) {
+            nk = 'email-sab-' + k.slice('email-sabsabsa-'.length);
+          } else if (k.indexOf('sabsabsa') === 0) {
+            nk = 'sab' + k.slice('sabsabsa'.length);
+          }
+          if (!nk || nk === k) continue;
+          keysToCopy.push([k, nk]);
+        }
+        keysToCopy.forEach(function (pair) {
+          var oldKey = pair[0], newKey = pair[1];
+          try {
+            var val = store.getItem(oldKey);
+            if (val !== null && store.getItem(newKey) === null) {
+              store.setItem(newKey, val);
+            }
+          } catch (e) {}
+        });
+        keysToCopy.forEach(function (pair) {
+          try { store.removeItem(pair[0]); } catch (e) {}
+        });
+      } catch (e) {}
+    }
+    migrate(window.localStorage);
+    migrate(window.sessionStorage);
+  })();
+  </script>
+  <script nonce="{{CSP_NONCE}}">
+  window._sabLoadTime = Date.now();
   (function(){
     try {
-      var t = JSON.parse(localStorage.getItem('sabsabsa-theme'));
+      var t = JSON.parse(localStorage.getItem('sab-theme'));
       if (t && t.colors) {
         var s = document.documentElement.style;
         var c = t.colors;
@@ -88,7 +124,7 @@
       // Apply UI text-size scale early (global accessibility pref, independent
       // of the active theme) so there's no flash on load.
       try {
-        var _us = localStorage.getItem('sabsabsa-ui-scale');
+        var _us = localStorage.getItem('sab-ui-scale');
         if (_us && _us !== '100') document.documentElement.classList.add('ui-scale-' + _us);
       } catch(e){}
       // Restore the sidebar mode before first paint. Otherwise the icon rail
@@ -98,7 +134,7 @@
         if (_mobileStartup) {
           document.documentElement.classList.add('ody-sidebar-off', 'ody-mobile-startup-sidebar-hidden');
         } else {
-          var _sm = localStorage.getItem('sabsabsa-sidebar-mode') || 'full';
+          var _sm = localStorage.getItem('sab-sidebar-mode') || 'full';
           if (_sm === 'mini') document.documentElement.classList.add('ody-sidebar-mini');
           else if (_sm === 'off') document.documentElement.classList.add('ody-sidebar-off');
         }
@@ -119,7 +155,7 @@
   (function(){
     try {
       var path = (window.location.pathname || '').toLowerCase();
-      var theme = (function(){ try { return JSON.parse(localStorage.getItem('sabsabsa-theme')); } catch(_) { return null; } })();
+      var theme = (function(){ try { return JSON.parse(localStorage.getItem('sab-theme')); } catch(_) { return null; } })();
       var ac = (theme && (theme.red || theme.colors && theme.colors.red)) || '#e06c75';
       // Shapes are line-stroke SVGs (no emoji glyphs). Each entry returns
       // the inner SVG markup rendered against currentColor=`ac`.
@@ -285,7 +321,7 @@
     },150);
     // startupShell.js hides the loader as soon as the shell is wired; it calls
     // back here to stop the wave because this interval is owned by this script.
-    window.__sabsabsaLoaderWaveStop=function(){clearInterval(iv)};
+    window.__sabLoaderWaveStop=function(){clearInterval(iv)};
     // Last-resort fallback for a boot that never reaches app.js at all. Must
     // still REMOVE the node: sessions.js reads its presence as "startup in
     // progress" and stops clearing the composer while it is around.
@@ -1066,7 +1102,7 @@
         (function(){
           function applyDefault(dc) {
             if (!dc || !dc.model) return false;
-            window.__sabsabsaDefaultChat = dc;
+            window.__sabDefaultChat = dc;
             var label = document.getElementById('model-picker-label');
             if (!label) return false;
             label.textContent = String(dc.model).split('/').pop();
@@ -1074,14 +1110,14 @@
             return true;
           }
           try {
-            var dc = JSON.parse(localStorage.getItem('sabsabsa-default-chat-cache') || 'null');
+            var dc = JSON.parse(localStorage.getItem('sab-default-chat-cache') || 'null');
             if (applyDefault(dc)) return;
           } catch (_) {}
           fetch('/api/default-chat', { credentials: 'same-origin' })
             .then(function(r){ return r.ok ? r.json() : null; })
             .then(function(dc){
               if (!applyDefault(dc)) return;
-              try { localStorage.setItem('sabsabsa-default-chat-cache', JSON.stringify(dc)); } catch (_) {}
+              try { localStorage.setItem('sab-default-chat-cache', JSON.stringify(dc)); } catch (_) {}
             })
             .catch(function(){});
         })();

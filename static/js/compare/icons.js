@@ -25,9 +25,9 @@ export const WAVE_FRAMES = ['▁▂▃', '▂▃▄', '▃▄▅', '▄▅▆', 
 
 // ── Storage keys & limits ──
 
-export const VOTES_STORAGE_KEY = 'sabsabsa-compare-votes';
+export const VOTES_STORAGE_KEY = 'sab-compare-votes';
 export const VOTES_MAX = 200;
-export const POOL_STORAGE_KEY = 'sabsabsa-shuffle-pool-excluded';
+export const POOL_STORAGE_KEY = 'sab-shuffle-pool-excluded';
 
 // ── Evaluation prompt templates ──
 //

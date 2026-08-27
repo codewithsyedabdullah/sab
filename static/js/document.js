@@ -37,7 +37,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
   let _emailStreamTargetBody = '';
   let _emailLocalDraftDebounce = null;
   let _emailRichbodySaveDebounce = null;
-  const _EMAIL_LOCAL_DRAFT_PREFIX = 'sabsabsa.email.replyDraft.v1:';
+  const _EMAIL_LOCAL_DRAFT_PREFIX = 'sab.email.replyDraft.v1:';
 
   // Diff mode state
   let _diffModeActive = false;
@@ -102,7 +102,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
   }
 
   async function _resolveComposeSendAccountId() {
-    const activeAccountId = window.__sabsabsaActiveEmailAccount || null;
+    const activeAccountId = window.__sabActiveEmailAccount || null;
     if (!activeAccountId) return null;
     const accounts = await _getEmailAccountsCached();
     const activeAccount = accounts.find(a => String(a.id) === String(activeAccountId));
@@ -125,8 +125,8 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
   const docs = new Map();           // docId -> { id, title, language, content, version, sessionId }
   let _emailSendInFlight = false;
 
-  const _docOpenKey = (sessionId) => 'sabsabsa-doc-open-' + sessionId;
-  const _docMinimizedKey = (sessionId) => 'sabsabsa-doc-minimized-' + sessionId;
+  const _docOpenKey = (sessionId) => 'sab-doc-open-' + sessionId;
+  const _docMinimizedKey = (sessionId) => 'sab-doc-minimized-' + sessionId;
 
   function _markDocVisibleState(sessionId, state) {
     if (!sessionId) return;
@@ -3201,27 +3201,27 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     await _uploadComposeFiles(files);
   }
 
-  let _sabsabsaAttachMenu = null;
+  let _sabAttachMenu = null;
 
-  function _closeSabsabsaAttachMenu() {
-    if (_sabsabsaAttachMenu) {
-      _sabsabsaAttachMenu.remove();
-      _sabsabsaAttachMenu = null;
+  function _closeSABAttachMenu() {
+    if (_sabAttachMenu) {
+      _sabAttachMenu.remove();
+      _sabAttachMenu = null;
     }
     document.removeEventListener('click', _attachMenuOutsideClick, true);
     document.removeEventListener('keydown', _attachMenuEscape, true);
   }
 
   function _attachMenuOutsideClick(e) {
-    if (_sabsabsaAttachMenu && !_sabsabsaAttachMenu.contains(e.target)) _closeSabsabsaAttachMenu();
+    if (_sabAttachMenu && !_sabAttachMenu.contains(e.target)) _closeSABAttachMenu();
   }
 
   function _attachMenuEscape(e) {
     if (e.key !== 'Escape') return;
-    _closeSabsabsaAttachMenu();
+    _closeSABAttachMenu();
   }
 
-  function _positionSabsabsaAttachMenu(anchor, menu) {
+  function _positionSABAttachMenu(anchor, menu) {
     const r = anchor?.getBoundingClientRect?.();
     if (!r) return;
     menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 310))}px`;
@@ -3234,18 +3234,18 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     });
   }
 
-  function _sabsabsaAttachLabel(item, kind) {
+  function _sabAttachLabel(item, kind) {
     if (kind === 'gallery') {
       return item.caption || item.prompt || item.filename || 'Gallery image';
     }
     return item.title || 'Untitled document';
   }
 
-  async function _stageSabsabsaAttachment(kind, id) {
+  async function _stageSABAttachment(kind, id) {
     const doc = docs.get(activeDocId);
     if (!doc || doc.language !== 'email') return null;
     if (!doc._composeAtts) doc._composeAtts = [];
-    const res = await fetch(`${API_BASE}/api/email/compose-from-sabsabsa`, {
+    const res = await fetch(`${API_BASE}/api/email/compose-from-sab`, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -3262,11 +3262,11 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     return data;
   }
 
-  async function _stageSabsabsaZip(items) {
+  async function _stageSABZip(items) {
     const doc = docs.get(activeDocId);
     if (!doc || doc.language !== 'email') return null;
     if (!doc._composeAtts) doc._composeAtts = [];
-    const res = await fetch(`${API_BASE}/api/email/compose-from-sabsabsa-zip`, {
+    const res = await fetch(`${API_BASE}/api/email/compose-from-sab-zip`, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -3283,43 +3283,43 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     return data;
   }
 
-  function _afterSabsabsaAttachmentsAdded(count, label) {
+  function _afterSABAttachmentsAdded(count, label) {
     _renderComposeAttachments();
     clearTimeout(_autoSaveDebounce);
     _autoSaveDebounce = setTimeout(() => { saveDocument({ silent: true }); }, 800);
     if (uiModule) uiModule.showToast(count > 1 ? `Attached ${count} items` : `Attached ${label || 'item'}`);
   }
 
-  async function _attachSabsabsaItem(kind, id, label, opts = {}) {
+  async function _attachSABItem(kind, id, label, opts = {}) {
     try {
-      const data = await _stageSabsabsaAttachment(kind, id);
+      const data = await _stageSABAttachment(kind, id);
       if (!data) return;
-      _afterSabsabsaAttachmentsAdded(1, label || data.filename);
-      if (!opts.keepOpen) _closeSabsabsaAttachMenu();
+      _afterSABAttachmentsAdded(1, label || data.filename);
+      if (!opts.keepOpen) _closeSABAttachMenu();
     } catch (err) {
-      console.error('Failed to attach Sabsabsa item:', err);
-      if (uiModule) uiModule.showError('Failed to attach from Sabsabsa');
+      console.error('Failed to attach SAB item:', err);
+      if (uiModule) uiModule.showError('Failed to attach from SAB');
     }
   }
 
-  function _selectedSabsabsaAttachRows(menu) {
-    return Array.from(menu?.querySelectorAll?.('.email-sabsabsa-attach-row.is-selected') || []);
+  function _selectedSABAttachRows(menu) {
+    return Array.from(menu?.querySelectorAll?.('.email-sab-attach-row.is-selected') || []);
   }
 
-  function _syncSabsabsaAttachSelection(menu) {
-    const selected = _selectedSabsabsaAttachRows(menu);
-    const bar = menu?.querySelector?.('.email-sabsabsa-attach-actions');
-    const count = menu?.querySelector?.('.email-sabsabsa-attach-count');
-    const attachBtn = menu?.querySelector?.('.email-sabsabsa-attach-selected');
+  function _syncSABAttachSelection(menu) {
+    const selected = _selectedSABAttachRows(menu);
+    const bar = menu?.querySelector?.('.email-sab-attach-actions');
+    const count = menu?.querySelector?.('.email-sab-attach-count');
+    const attachBtn = menu?.querySelector?.('.email-sab-attach-selected');
     if (bar) bar.style.display = '';
     if (count) count.textContent = selected.length ? `${selected.length} selected` : 'Select items to attach';
     if (attachBtn) attachBtn.disabled = selected.length === 0;
   }
 
-  async function _attachSelectedSabsabsaItems(menu) {
-    const rows = _selectedSabsabsaAttachRows(menu);
+  async function _attachSelectedSABItems(menu) {
+    const rows = _selectedSABAttachRows(menu);
     if (!rows.length) return;
-    const btn = menu.querySelector('.email-sabsabsa-attach-selected');
+    const btn = menu.querySelector('.email-sab-attach-selected');
     if (btn) {
       btn.disabled = true;
       btn.classList.add('is-loading');
@@ -3335,19 +3335,19 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
           : window.confirm(`Attach ${items.length} files as one zip?`);
       }
       if (zip) {
-        await _stageSabsabsaZip(items);
+        await _stageSABZip(items);
         added = 1;
       } else {
         for (const item of items) {
-          await _stageSabsabsaAttachment(item.kind, item.id);
+          await _stageSABAttachment(item.kind, item.id);
           added += 1;
         }
       }
-      _afterSabsabsaAttachmentsAdded(added, zip ? 'sabsabsa-attachments.zip' : undefined);
-      _closeSabsabsaAttachMenu();
+      _afterSABAttachmentsAdded(added, zip ? 'sab-attachments.zip' : undefined);
+      _closeSABAttachMenu();
     } catch (err) {
-      console.error('Failed to attach selected Sabsabsa items:', err);
-      if (uiModule) uiModule.showError(added ? `Attached ${added}, then failed` : 'Failed to attach from Sabsabsa');
+      console.error('Failed to attach selected SAB items:', err);
+      if (uiModule) uiModule.showError(added ? `Attached ${added}, then failed` : 'Failed to attach from SAB');
       _renderComposeAttachments();
     } finally {
       if (btn) {
@@ -3357,15 +3357,15 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     }
   }
 
-  async function _loadSabsabsaAttachItems(menu, kind) {
-    const list = menu.querySelector('.email-sabsabsa-attach-list');
+  async function _loadSABAttachItems(menu, kind) {
+    const list = menu.querySelector('.email-sab-attach-list');
     if (!list) return;
     menu.dataset.odyAttachKind = kind;
     list.replaceChildren(spinnerModule.createLoadingRow('Loading…', 14));
     menu.querySelectorAll('[data-ody-attach-kind]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.odyAttachKind === kind);
     });
-    const q = (menu.querySelector('.email-sabsabsa-attach-search')?.value || '').trim();
+    const q = (menu.querySelector('.email-sab-attach-search')?.value || '').trim();
     try {
       const params = new URLSearchParams({ sort: 'recent', limit: '20' });
       if (q) params.set('search', q);
@@ -3379,50 +3379,50 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
         ? (Array.isArray(data?.items) ? data.items : Array.isArray(data?.images) ? data.images : [])
         : (Array.isArray(data?.documents) ? data.documents : Array.isArray(data?.items) ? data.items : []);
       if (!items.length) {
-        list.innerHTML = `<div class="email-sabsabsa-attach-empty">${q ? 'No matches' : `No ${kind === 'gallery' ? 'images' : 'documents'}`}</div>`;
-        _syncSabsabsaAttachSelection(menu);
+        list.innerHTML = `<div class="email-sab-attach-empty">${q ? 'No matches' : `No ${kind === 'gallery' ? 'images' : 'documents'}`}</div>`;
+        _syncSABAttachSelection(menu);
         return;
       }
       list.innerHTML = '';
       for (const item of items) {
-        const label = _sabsabsaAttachLabel(item, kind);
+        const label = _sabAttachLabel(item, kind);
         const row = document.createElement('button');
         row.type = 'button';
-        row.className = `email-sabsabsa-attach-row ${kind === 'gallery' ? 'is-gallery' : ''}`;
+        row.className = `email-sab-attach-row ${kind === 'gallery' ? 'is-gallery' : ''}`;
         row.dataset.id = item.id || '';
         row.dataset.kind = kind;
         if (kind === 'gallery') {
           const src = item.url ? `${API_BASE}${item.url}` : '';
           row.innerHTML = `
-            <span class="email-sabsabsa-attach-dot" aria-hidden="true"></span>
-            <span class="email-sabsabsa-attach-thumb">${src ? `<img src="${_escHtml(src)}" alt="">` : ''}</span>
-            <span class="email-sabsabsa-attach-main">
-              <span class="email-sabsabsa-attach-title">${_escHtml(label)}</span>
-              <span class="email-sabsabsa-attach-meta">${_escHtml(item.filename || 'image')}</span>
+            <span class="email-sab-attach-dot" aria-hidden="true"></span>
+            <span class="email-sab-attach-thumb">${src ? `<img src="${_escHtml(src)}" alt="">` : ''}</span>
+            <span class="email-sab-attach-main">
+              <span class="email-sab-attach-title">${_escHtml(label)}</span>
+              <span class="email-sab-attach-meta">${_escHtml(item.filename || 'image')}</span>
             </span>
           `;
         } else {
           row.innerHTML = `
-            <span class="email-sabsabsa-attach-dot" aria-hidden="true"></span>
-            <span class="email-sabsabsa-attach-icon">${langIcon(item.language || 'text', 14, { style: 'opacity:0.8;' })}</span>
-            <span class="email-sabsabsa-attach-main">
-              <span class="email-sabsabsa-attach-title">${_escHtml(label)}</span>
-              <span class="email-sabsabsa-attach-meta">${_escHtml(item.language || 'text')}</span>
+            <span class="email-sab-attach-dot" aria-hidden="true"></span>
+            <span class="email-sab-attach-icon">${langIcon(item.language || 'text', 14, { style: 'opacity:0.8;' })}</span>
+            <span class="email-sab-attach-main">
+              <span class="email-sab-attach-title">${_escHtml(label)}</span>
+              <span class="email-sab-attach-meta">${_escHtml(item.language || 'text')}</span>
             </span>
           `;
         }
         row.addEventListener('click', (ev) => {
           ev.preventDefault();
           row.classList.toggle('is-selected');
-          _syncSabsabsaAttachSelection(menu);
+          _syncSABAttachSelection(menu);
         });
-        row.addEventListener('dblclick', () => _attachSabsabsaItem(kind, item.id, label, { keepOpen: false }));
+        row.addEventListener('dblclick', () => _attachSABItem(kind, item.id, label, { keepOpen: false }));
         list.appendChild(row);
       }
-      _syncSabsabsaAttachSelection(menu);
+      _syncSABAttachSelection(menu);
     } catch (err) {
-      console.error('Failed to load Sabsabsa attach items:', err);
-      list.innerHTML = '<div class="email-sabsabsa-attach-empty">Could not load</div>';
+      console.error('Failed to load SAB attach items:', err);
+      list.innerHTML = '<div class="email-sab-attach-empty">Could not load</div>';
     }
   }
 
@@ -3431,15 +3431,15 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       document.getElementById('doc-md-image-input')?.click();
       return;
     }
-    _closeSabsabsaAttachMenu();
+    _closeSABAttachMenu();
     const menu = document.createElement('div');
-    menu.className = 'email-sabsabsa-attach-menu';
+    menu.className = 'email-sab-attach-menu';
     menu.innerHTML = `
-      <button type="button" class="email-sabsabsa-attach-local">
+      <button type="button" class="email-sab-attach-local">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         Upload file
       </button>
-      <div class="email-sabsabsa-attach-tabs">
+      <div class="email-sab-attach-tabs">
         <button type="button" data-ody-attach-kind="document" class="active">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h6"/></svg>
           <span>Documents</span>
@@ -3449,42 +3449,42 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
           <span>Gallery</span>
         </button>
       </div>
-      <label class="email-sabsabsa-attach-search-wrap">
+      <label class="email-sab-attach-search-wrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="search" class="email-sabsabsa-attach-search" placeholder="Search attachments">
+        <input type="search" class="email-sab-attach-search" placeholder="Search attachments">
       </label>
-      <div class="email-sabsabsa-attach-list"></div>
-      <div class="email-sabsabsa-attach-actions">
-        <span class="email-sabsabsa-attach-count"></span>
-        <button type="button" class="email-sabsabsa-attach-selected" disabled>
+      <div class="email-sab-attach-list"></div>
+      <div class="email-sab-attach-actions">
+        <span class="email-sab-attach-count"></span>
+        <button type="button" class="email-sab-attach-selected" disabled>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.8l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           <span>Attach</span>
         </button>
       </div>
     `;
     document.body.appendChild(menu);
-    _sabsabsaAttachMenu = menu;
-    _positionSabsabsaAttachMenu(anchor, menu);
-    menu.querySelector('.email-sabsabsa-attach-local')?.addEventListener('click', () => {
-      _closeSabsabsaAttachMenu();
+    _sabAttachMenu = menu;
+    _positionSABAttachMenu(anchor, menu);
+    menu.querySelector('.email-sab-attach-local')?.addEventListener('click', () => {
+      _closeSABAttachMenu();
       document.getElementById('doc-email-file-input')?.click();
     });
     menu.querySelectorAll('[data-ody-attach-kind]').forEach(btn => {
-      btn.addEventListener('click', () => _loadSabsabsaAttachItems(menu, btn.dataset.odyAttachKind));
+      btn.addEventListener('click', () => _loadSABAttachItems(menu, btn.dataset.odyAttachKind));
     });
     let attachSearchTimer = null;
-    menu.querySelector('.email-sabsabsa-attach-search')?.addEventListener('input', () => {
+    menu.querySelector('.email-sab-attach-search')?.addEventListener('input', () => {
       clearTimeout(attachSearchTimer);
       attachSearchTimer = setTimeout(() => {
-        _loadSabsabsaAttachItems(menu, menu.dataset.odyAttachKind || 'document');
+        _loadSABAttachItems(menu, menu.dataset.odyAttachKind || 'document');
       }, 220);
     });
-    menu.querySelector('.email-sabsabsa-attach-selected')?.addEventListener('click', () => _attachSelectedSabsabsaItems(menu));
+    menu.querySelector('.email-sab-attach-selected')?.addEventListener('click', () => _attachSelectedSABItems(menu));
     setTimeout(() => {
       document.addEventListener('click', _attachMenuOutsideClick, true);
       document.addEventListener('keydown', _attachMenuEscape, true);
     }, 0);
-    _loadSabsabsaAttachItems(menu, 'document');
+    _loadSABAttachItems(menu, 'document');
   }
 
   function _isMarkdownImageFile(file) {
@@ -4035,7 +4035,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
           body_html: bodyHtml,
           in_reply_to: inReplyTo || null,
           references: references || null,
-          account_id: window.__sabsabsaActiveEmailAccount || null,
+          account_id: window.__sabActiveEmailAccount || null,
         }),
       });
       const data = await res.json();
@@ -4093,7 +4093,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
   // Mirrors the email reader's AI reply choice popover: textarea for an
   // optional steering note, then one Submit button.
   let _docAiReplyChoiceMenu = null;
-  const _AI_REPLY_CONTEXT_STORE_PREFIX = 'sabsabsa:email-ai-reply-context:v1:';
+  const _AI_REPLY_CONTEXT_STORE_PREFIX = 'sab:email-ai-reply-context:v1:';
   function _docAiReplyContextKey() {
     try {
       const sourceUid = document.getElementById('doc-email-source-uid')?.value?.trim() || '';
@@ -4219,7 +4219,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     const inReplyTo = document.getElementById('doc-email-in-reply-to')?.value?.trim() || '';
     const sourceUid = document.getElementById('doc-email-source-uid')?.value?.trim() || '';
     const sourceFolder = document.getElementById('doc-email-source-folder')?.value?.trim() || 'INBOX';
-    const sourceAccountId = docs.get(activeDocId)?.sourceEmailAccountId || window.__sabsabsaActiveEmailAccount || '';
+    const sourceAccountId = docs.get(activeDocId)?.sourceEmailAccountId || window.__sabActiveEmailAccount || '';
     const cleanAiReplyText = (text) => {
       if (!text) return '';
       let t = String(text);
@@ -4979,8 +4979,8 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
         <button id="doc-email-discard-btn" class="email-discard-btn" title="Close email" style="display:inline-flex;align-items:center;gap:5px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span></button>
         <span style="flex:1"></span>
         <div class="email-send-split">
-          <button type="button" id="doc-email-send-btn" class="email-send-btn email-send-main" title="Send email (Ctrl+Enter)" onpointerdown="window.sabsabsaEmailSendIntent&&window.sabsabsaEmailSendIntent(event)" onmousedown="window.sabsabsaEmailSendIntent&&window.sabsabsaEmailSendIntent(event)" onclick="window.sabsabsaEmailSendIntent&&window.sabsabsaEmailSendIntent(event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Send</button>
-          <button type="button" id="doc-email-send-caret" class="email-send-btn email-send-caret" title="More send options" aria-haspopup="true" aria-expanded="false" onpointerdown="window.sabsabsaEmailCaretIntent&&window.sabsabsaEmailCaretIntent(event)" onmousedown="window.sabsabsaEmailCaretIntent&&window.sabsabsaEmailCaretIntent(event)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <button type="button" id="doc-email-send-btn" class="email-send-btn email-send-main" title="Send email (Ctrl+Enter)" onpointerdown="window.sabEmailSendIntent&&window.sabEmailSendIntent(event)" onmousedown="window.sabEmailSendIntent&&window.sabEmailSendIntent(event)" onclick="window.sabEmailSendIntent&&window.sabEmailSendIntent(event)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Send</button>
+          <button type="button" id="doc-email-send-caret" class="email-send-btn email-send-caret" title="More send options" aria-haspopup="true" aria-expanded="false" onpointerdown="window.sabEmailCaretIntent&&window.sabEmailCaretIntent(event)" onmousedown="window.sabEmailCaretIntent&&window.sabEmailCaretIntent(event)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
           <div id="doc-email-more-menu" class="email-more-menu" style="display:none">
             <div class="dropdown-item-compact" id="doc-email-draft-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span>Save Draft</div>
             <div class="dropdown-item-compact" id="doc-email-schedule-btn"><span class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>Schedule Send...</div>
@@ -5423,7 +5423,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     };
 
     const handleSendIntent = (e) => {
-      if (e && e.__sabsabsaEmailSendHandled) return;
+      if (e && e.__sabEmailSendHandled) return;
       const rawTarget = e && e.target;
       const target = rawTarget && rawTarget.nodeType === Node.TEXT_NODE ? rawTarget.parentElement : rawTarget;
       const sendButtons = Array.from(document.querySelectorAll('#doc-email-send-btn'));
@@ -5434,14 +5434,14 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       if (e) {
         e.preventDefault();
         e.stopPropagation();
-        e.__sabsabsaEmailSendHandled = true;
+        e.__sabEmailSendHandled = true;
       }
       const _m = document.getElementById('doc-email-more-menu');
       if (_m) _m.style.display = 'none';
       document.getElementById('doc-email-send-caret')?.setAttribute('aria-expanded', 'false');
       _sendEmail();
     };
-    window.sabsabsaEmailSendIntent = handleSendIntent;
+    window.sabEmailSendIntent = handleSendIntent;
     if (!window._emailSendDelegatedBoundV3) {
       window._emailSendDelegatedBoundV3 = true;
       ['pointerdown', 'mousedown', 'pointerup', 'click'].forEach((type) => {
@@ -5459,12 +5459,12 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       if (caret) caret.setAttribute('aria-expanded', String(opening));
     };
     const handleCaretIntent = (e) => {
-      if (e && e.__sabsabsaEmailCaretHandled) return;
+      if (e && e.__sabEmailCaretHandled) return;
       const now = Date.now();
       if (e && e.type === 'click' && now - lastCaretToggleAt < 350) {
         e.preventDefault();
         e.stopPropagation();
-        e.__sabsabsaEmailCaretHandled = true;
+        e.__sabEmailCaretHandled = true;
         return;
       }
       const rawTarget = e && e.target;
@@ -5477,12 +5477,12 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
       if (e) {
         e.preventDefault();
         e.stopPropagation();
-        e.__sabsabsaEmailCaretHandled = true;
+        e.__sabEmailCaretHandled = true;
       }
       lastCaretToggleAt = now;
       toggleSendMenu(caret);
     };
-    window.sabsabsaEmailCaretIntent = handleCaretIntent;
+    window.sabEmailCaretIntent = handleCaretIntent;
     if (!window._emailCaretDelegatedBoundV1) {
       window._emailCaretDelegatedBoundV1 = true;
       ['pointerdown', 'mousedown', 'click'].forEach((type) => {
@@ -5717,7 +5717,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     const editorWrap = document.getElementById('doc-editor-wrap');
     const _fontSizes = ['s', 'm', 'l'];
     const _iconSizes = [12, 14, 16];
-    let _fontIdx = parseInt(localStorage.getItem('sabsabsa-doc-fontsize') || '0', 10);
+    let _fontIdx = parseInt(localStorage.getItem('sab-doc-fontsize') || '0', 10);
     if (!(_fontIdx >= 0 && _fontIdx < 3)) _fontIdx = 0;
     function _applyDocFont() {
       const richEmailBody = document.getElementById('doc-email-richbody');
@@ -5737,7 +5737,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
           el.style.display = active ? '' : 'none';
         });
       }
-      localStorage.setItem('sabsabsa-doc-fontsize', _fontIdx);
+      localStorage.setItem('sab-doc-fontsize', _fontIdx);
     }
     _applyDocFont();
     // Click cycles through the sizes (S → M → L → S).
@@ -6695,7 +6695,7 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
   }
 
   /** Collapse action buttons into overflow "..." menu (3 most-used visible) */
-  const _DOC_RECENTS_KEY = 'sabsabsa-doc-actions-recent';
+  const _DOC_RECENTS_KEY = 'sab-doc-actions-recent';
   const _DOC_MAX_VISIBLE = 2;
 
   function _getDocRecent() {
@@ -8221,16 +8221,16 @@ import { bindMenuDismiss, dismissOrRemove } from './escMenuStack.js';
     if (!activeDocId) return;
     const data = _activeSuggestions.map(s => ({ id: s.id, find: s.find, replace: s.replace, reason: s.reason }));
     if (data.length) {
-      localStorage.setItem('sabsabsa-suggestions-' + activeDocId, JSON.stringify(data));
+      localStorage.setItem('sab-suggestions-' + activeDocId, JSON.stringify(data));
     } else {
-      localStorage.removeItem('sabsabsa-suggestions-' + activeDocId);
+      localStorage.removeItem('sab-suggestions-' + activeDocId);
     }
   }
 
   /** Restore suggestions from localStorage for a doc */
   function _restoreSuggestionsFromStorage(docId) {
     try {
-      const raw = localStorage.getItem('sabsabsa-suggestions-' + docId);
+      const raw = localStorage.getItem('sab-suggestions-' + docId);
       if (!raw) return;
       const data = JSON.parse(raw);
       if (!Array.isArray(data) || !data.length) return;

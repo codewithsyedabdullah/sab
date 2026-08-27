@@ -19,10 +19,10 @@ let _lastFetchTime = 0;
 let _fetchInflight = null;
 let _fetchSeq = 0;
 const _FETCH_CACHE_TTL = 30000; // 30s client-side cache for /api/models
-const COLLAPSE_KEY = 'sabsabsa-models-collapsed';
-const FAVORITES_KEY = 'sabsabsa-model-favorites';
-const USAGE_KEY = 'sabsabsa-model-usage';
-const SORT_KEY = 'sabsabsa-model-sort';
+const COLLAPSE_KEY = 'sab-models-collapsed';
+const FAVORITES_KEY = 'sab-model-favorites';
+const USAGE_KEY = 'sab-model-usage';
+const SORT_KEY = 'sab-model-sort';
 
 export function init(apiBase) {
   API_BASE = apiBase;

@@ -62,7 +62,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
   const norm = (value) => String(value || '').replace(/\r\n/g, '\n').trimEnd();
   const debug = (...args) => {
     try {
-      if (localStorage.getItem('sabsabsaArrowRecallDebug') === '1') {
+      if (localStorage.getItem('sabArrowRecallDebug') === '1') {
         console.debug('[arrow-recall]', ...args);
       }
     } catch (_) {}
@@ -74,7 +74,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
     recallIndex = -1;
     lastRecalledValue = '';
     recallHistory = [];
-    try { delete composer.dataset.sabsabsaRecallIndex; } catch (_) {}
+    try { delete composer.dataset.sabRecallIndex; } catch (_) {}
   });
 
   composer.addEventListener('keydown', (e) => {
@@ -101,7 +101,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
       currentIndex = recallIndex;
     }
     if (currentIndex < 0 && currentValue) {
-      const markedIndex = Number(composer.dataset?.sabsabsaRecallIndex);
+      const markedIndex = Number(composer.dataset?.sabRecallIndex);
       if (Number.isInteger(markedIndex) && markedIndex >= 0 && markedIndex < history.length) {
         currentIndex = markedIndex;
       }
@@ -121,7 +121,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
         recallHistory = history;
         applyingRecall = true;
         lastRecalledValue = '';
-        try { delete composer.dataset.sabsabsaRecallIndex; } catch (_) {}
+        try { delete composer.dataset.sabRecallIndex; } catch (_) {}
         composer.value = '';
         try { composer.selectionStart = composer.selectionEnd = 0; } catch (_) {}
         if (autoResize) autoResize(composer);
@@ -134,7 +134,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
       recallHistory = history;
       applyingRecall = true;
       lastRecalledValue = recalled;
-      try { composer.dataset.sabsabsaRecallIndex = String(nextIndex); } catch (_) {}
+      try { composer.dataset.sabRecallIndex = String(nextIndex); } catch (_) {}
       composer.value = recalled;
       try { composer.selectionStart = composer.selectionEnd = recalled.length; } catch (_) {}
       if (autoResize) autoResize(composer);
@@ -157,7 +157,7 @@ export function wireArrowUpRecall(composer, getUserMessages, options = {}) {
     recallHistory = history;
     applyingRecall = true;
     lastRecalledValue = recalled;
-    try { composer.dataset.sabsabsaRecallIndex = String(nextIndex); } catch (_) {}
+    try { composer.dataset.sabRecallIndex = String(nextIndex); } catch (_) {}
     composer.value = recalled;
     try {
       composer.selectionStart = composer.selectionEnd = recalled.length;

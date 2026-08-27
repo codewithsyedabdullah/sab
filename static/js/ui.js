@@ -165,8 +165,8 @@ function _activateSpaceCard(card) {
 }
 
 function _initHoverCardSpaceToggle() {
-  if (document._sabsabsaHoverCardSpaceToggle) return;
-  document._sabsabsaHoverCardSpaceToggle = true;
+  if (document._sabHoverCardSpaceToggle) return;
+  document._sabHoverCardSpaceToggle = true;
   document.addEventListener('pointerover', (e) => {
     _lastPointerClientX = e.clientX;
     _lastPointerClientY = e.clientY;

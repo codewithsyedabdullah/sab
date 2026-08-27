@@ -34,7 +34,7 @@ export function initSidebarLayout(Storage, opts) {
   // ── Icon rail + sidebar toggle ──
   const iconRail = document.getElementById('icon-rail');
   const hamburgerBtn = document.getElementById('hamburger-btn');
-  const SIDEBAR_MODE_KEY = 'sabsabsa-sidebar-mode';
+  const SIDEBAR_MODE_KEY = 'sab-sidebar-mode';
 
   function _setSidebarModeClasses(mode) {
     document.documentElement.classList.remove('ody-mobile-startup-sidebar-hidden');

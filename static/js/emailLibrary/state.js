@@ -25,7 +25,7 @@ export const state = {
   _libFilter: 'all',             // all, unread, unanswered
   _libSort: 'recent',            // recent, unread, favorites
   _libHasAttachments: false,
-  _libShowTags: localStorage.getItem('sabsabsa.email.showTags') !== '0',
+  _libShowTags: localStorage.getItem('sab.email.showTags') !== '0',
   _libLoading: false,
   _docModule: null,
   _onEmailClick: null,

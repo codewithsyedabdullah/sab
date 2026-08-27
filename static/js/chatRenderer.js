@@ -930,7 +930,7 @@ export function getImageCost(model, quality, size) {
 const _COST_KEY = 'ody-session-cost';
 const _COST_RUNS_KEY = 'ody-session-cost-runs';
 const _MAX_COST_RUNS_PER_SESSION = 256;
-const _COST_LEDGER_LOCK = 'sabsabsa-session-cost-ledger';
+const _COST_LEDGER_LOCK = 'sab-session-cost-ledger';
 
 /** Return the accumulated cost for the current (or given) session. */
 export function getSessionCost(sessionId) {
@@ -1701,7 +1701,7 @@ export function showWelcomeScreen() {
 }
 
 // ── Dynamic action buttons (show 3 most recent, rest under ···) ──
-const _ACTION_RECENTS_KEY = 'sabsabsa-msg-actions-recent';
+const _ACTION_RECENTS_KEY = 'sab-msg-actions-recent';
 const _MAX_VISIBLE = 2;
 
 function _getRecentActions() {
@@ -1917,7 +1917,7 @@ export function createMsgFooter(msgElement) {
 /**
  * Create a footer row for a user message with action buttons (same system as AI footer).
  */
-const _USER_ACTION_RECENTS_KEY = 'sabsabsa-user-actions-recent';
+const _USER_ACTION_RECENTS_KEY = 'sab-user-actions-recent';
 
 function _getUserRecentActions() {
   try { return JSON.parse(localStorage.getItem(_USER_ACTION_RECENTS_KEY) || '[]'); } catch { return []; }
@@ -2502,7 +2502,7 @@ export function renderAskUserCard(payload, options) {
             if (accepted !== false) card.remove();
           } else {
             card.remove();
-            document.dispatchEvent(new CustomEvent('sabsabsa:tool-approval', { detail }));
+            document.dispatchEvent(new CustomEvent('sab:tool-approval', { detail }));
           }
         } else {
           send(label);

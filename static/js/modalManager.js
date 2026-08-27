@@ -32,7 +32,7 @@ import { nextToolWindowZ } from './toolWindowZOrder.js';
 
 const _state = new Map(); // id -> { restoreFn, closeFn, railBtnId, isMinimized, restoreMinHeight }
 
-const _rememberedDockKey = (id) => `sabsabsa-modal-remembered-dock-${id}`;
+const _rememberedDockKey = (id) => `sab-modal-remembered-dock-${id}`;
 function _rememberDock(id, side) {
   if (!id || !side) return;
   try { localStorage.setItem(_rememberedDockKey(id), side); } catch (_) {}
@@ -76,7 +76,7 @@ function _bringToFront(modal) {
 
 function _emitModalOpened(id, modal) {
   try {
-    window.dispatchEvent(new CustomEvent('sabsabsa:modal-opened', {
+    window.dispatchEvent(new CustomEvent('sab:modal-opened', {
       detail: { id, modal },
     }));
   } catch (_) {}
@@ -177,7 +177,7 @@ let _dockPos = null; // { left, top } | null
 const _renderedChipIds = new Set();
 
 // ── Persistence (mobile dock + free-chip positions) ──
-const _DOCK_STORAGE_KEY = 'sabsabsa.mobileDockState.v1';
+const _DOCK_STORAGE_KEY = 'sab.mobileDockState.v1';
 let _dockStateLoaded = false;
 
 function _saveDockState() {

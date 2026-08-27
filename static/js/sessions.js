@@ -26,7 +26,7 @@ const SIDEBAR_MAX_VISIBLE = 10;
 const FOLDER_MAX_VISIBLE = 5;
 let _showAllSessions = false;
 let _expandedFolders = {};  // folderName -> true if "show more" clicked
-let _sortMode = Storage.get('sabsabsa-session-sort') || 'active'; // default to last active
+let _sortMode = Storage.get('sab-session-sort') || 'active'; // default to last active
 const DATE_SECTION_COLLAPSE_KEY = 'ody-session-date-section-collapsed';
 let _autoCreateInProgress = false; // guard against recursive auto-create
 const _INCOGNITO_SESSIONS_KEY = 'ody-incognito-sessions'; // sessionStorage key for incognito session IDs
@@ -36,7 +36,7 @@ let _historyPager = null;
 
 function _shouldPreserveStartupComposer(msgInput) {
   if (!msgInput || !msgInput.value) return false;
-  if (window.__sabsabsaComposerUserEdited) return true;
+  if (window.__sabComposerUserEdited) return true;
   return !!document.getElementById('app-loader') && document.activeElement === msgInput;
 }
 
@@ -342,8 +342,8 @@ function _normalizeSessionsList(fetched) {
 export function initDependencies() {}
 
 // ── Folder state persistence ──
-const FOLDER_STATE_KEY = 'sabsabsa-folder-state';
-const FOLDER_ORDER_KEY = 'sabsabsa-folder-order';
+const FOLDER_STATE_KEY = 'sab-folder-state';
+const FOLDER_ORDER_KEY = 'sab-folder-order';
 
 function loadFolderState() {
   return Storage.getJSON(FOLDER_STATE_KEY, {});
@@ -1856,10 +1856,10 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
       try { window.documentModule.clearSelection(); } catch {}
     }
     currentSessionId = id;
-    try { window.__sabsabsaLastSelectedSessionId = id; } catch (_) {}
+    try { window.__sabLastSelectedSessionId = id; } catch (_) {}
     // Identify Assistant / task-output sessions so we don't "trap" the user
     // there on return. Skipped from both `lastSessionId` persistence and the
-    // URL hash — the user complained that coming back to Sabsabsa kept
+    // URL hash — the user complained that coming back to SAB kept
     // landing them on the auto-firing task-log chat instead of their last
     // real conversation.
     const _meta = sessions.find(s => s.id === id);
@@ -2114,7 +2114,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
     if (window.documentModule) {
       const docBtn = document.getElementById('overflow-doc-btn');
       const meta = sessions.find(s => s.id === id);
-      const shouldOpen = localStorage.getItem('sabsabsa-doc-open-' + id) === '1';
+      const shouldOpen = localStorage.getItem('sab-doc-open-' + id) === '1';
       const hasDocs = !!(meta && meta.has_documents);
       if (docBtn) {
         docBtn.classList.remove('active');
@@ -2149,8 +2149,8 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
     // is idle.
     if (window.memoryModule && window.memoryModule.loadMemories) {
       setTimeout(() => {
-        const busy = !!window.__sabsabsaChatBusy
-          || Date.now() < (window.__sabsabsaChatBusyUntil || 0)
+        const busy = !!window.__sabChatBusy
+          || Date.now() < (window.__sabChatBusyUntil || 0)
           || !!document.querySelector('.send-btn[data-mode="streaming"], .send-btn.send-pending');
         if (!busy) window.memoryModule.loadMemories().catch(() => {});
       }, 2500);
@@ -2174,11 +2174,11 @@ let _pendingMaterializePromise = null;
 async function _getPreferredDefaultChat() {
   let dc = null;
   try {
-    dc = window.__sabsabsaDefaultChat || null;
+    dc = window.__sabDefaultChat || null;
   } catch (_) {}
   if (!dc || !dc.endpoint_url || !dc.model) {
     try {
-      dc = JSON.parse(localStorage.getItem('sabsabsa-default-chat-cache') || 'null');
+      dc = JSON.parse(localStorage.getItem('sab-default-chat-cache') || 'null');
     } catch (_) {}
   }
   if (dc && dc.endpoint_url && dc.model) return dc;
@@ -2187,8 +2187,8 @@ async function _getPreferredDefaultChat() {
     dc = await dcRes.json();
     if (dc && dc.endpoint_url && dc.model) {
       try {
-        window.__sabsabsaDefaultChat = dc;
-        localStorage.setItem('sabsabsa-default-chat-cache', JSON.stringify(dc));
+        window.__sabDefaultChat = dc;
+        localStorage.setItem('sab-default-chat-cache', JSON.stringify(dc));
       } catch (_) {}
       return dc;
     }
@@ -2225,7 +2225,7 @@ export function createDirectChat(url, modelId, endpointId, opts = {}) {
   _skipAutoSelect = true;
   _suppressNextSessionLoading = true;
   currentSessionId = null;
-  try { window.__sabsabsaLastSelectedSessionId = ''; } catch (_) {}
+  try { window.__sabLastSelectedSessionId = ''; } catch (_) {}
   Storage.remove('lastSessionId');
   history.replaceState(null, '', window.location.pathname);
   document.querySelectorAll('.list-item.active-session, .session-item.active').forEach(el => {
@@ -2405,7 +2405,7 @@ export function getCurrentEndpointUrl() {
 export function setCurrentSessionId(id) {
   _sessionNavToken++;
   currentSessionId = id;
-  try { window.__sabsabsaLastSelectedSessionId = id || ''; } catch (_) {}
+  try { window.__sabLastSelectedSessionId = id || ''; } catch (_) {}
   if (!id) {
     _suppressNextSessionLoading = true;
     Storage.remove('lastSessionId');
@@ -3637,8 +3637,8 @@ export function closeArchive() {
 export function getSortMode() { return _sortMode; }
 export function setSortMode(mode) {
   _sortMode = mode || null;
-  if (mode) Storage.set('sabsabsa-session-sort', mode);
-  else Storage.remove('sabsabsa-session-sort');
+  if (mode) Storage.set('sab-session-sort', mode);
+  else Storage.remove('sab-session-sort');
   renderSessionList();
 }
 

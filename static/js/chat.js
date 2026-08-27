@@ -79,7 +79,7 @@ import { loadPanel } from './panels.js';
     if (sendButton) sendButton.click();
   }
 
-  document.addEventListener('sabsabsa:tool-approval', (event) => {
+  document.addEventListener('sab:tool-approval', (event) => {
     const detail = event && event.detail ? event.detail : {};
     const decision = String(detail.decision || '').toLowerCase();
     if (!detail.approval_id || !['approve', 'approve_task', 'deny'].includes(decision)) return;
@@ -330,9 +330,9 @@ import { loadPanel } from './panels.js';
 
   function _setForegroundChatBusy(active) {
     try {
-      window.__sabsabsaChatBusy = !!active;
-      window.__sabsabsaChatBusyUntil = active ? Date.now() + 120000 : Date.now() + 1200;
-      window.dispatchEvent(new CustomEvent('sabsabsa:chat-busy-change', { detail: { active: !!active } }));
+      window.__sabChatBusy = !!active;
+      window.__sabChatBusyUntil = active ? Date.now() + 120000 : Date.now() + 1200;
+      window.dispatchEvent(new CustomEvent('sab:chat-busy-change', { detail: { active: !!active } }));
     } catch (_) {}
   }
   let _pendingContinue = null; // Stores the stopped AI element to merge with new response
@@ -398,11 +398,11 @@ import { loadPanel } from './panels.js';
     if (sessionModule.hasPendingChat && sessionModule.hasPendingChat()) return false;
     const activeRowId = document.querySelector('.list-item.active-session[data-session-id], .session-item.active[data-session-id]')?.dataset?.sessionId || '';
     const hashId = _hashSessionCandidate();
-    const lastSelectedId = String(window.__sabsabsaLastSelectedSessionId || '').trim();
+    const lastSelectedId = String(window.__sabLastSelectedSessionId || '').trim();
     const targetId = activeRowId || hashId || lastSelectedId;
     if (!targetId) return false;
     try {
-      window.__sabsabsaComposerUserEdited = true;
+      window.__sabComposerUserEdited = true;
       if (sessionModule.selectSession) {
         await sessionModule.selectSession(targetId, { keepSidebar: true, showLoading: false });
       } else if (sessionModule.setCurrentSessionId) {
@@ -469,14 +469,14 @@ import { loadPanel } from './panels.js';
       if (pending && pending.modelId) return pending.modelId;
     } catch (_) {}
     try {
-      const lastPicked = window.__sabsabsaLastPickedRoute || null;
+      const lastPicked = window.__sabLastPickedRoute || null;
       if (lastPicked && lastPicked.model && Date.now() - (lastPicked.picked_at || 0) < 10 * 60 * 1000) {
         return lastPicked.model;
       }
     } catch (_) {}
     if (routeSnapshot && routeSnapshot.model) return routeSnapshot.model;
     try {
-      const dc = window.__sabsabsaDefaultChat || JSON.parse(localStorage.getItem('sabsabsa-default-chat-cache') || 'null');
+      const dc = window.__sabDefaultChat || JSON.parse(localStorage.getItem('sab-default-chat-cache') || 'null');
       if (dc && dc.model) return dc.model;
     } catch (_) {}
     return '';
@@ -676,7 +676,7 @@ import { loadPanel } from './panels.js';
     fetch(`/api/chat/stop/${encodeURIComponent(sessionId)}`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { 'X-Sabsabsa-Run-Id': runId },
+      headers: { 'X-SAB-Run-Id': runId },
     }).catch(() => {});
   }
 
@@ -852,7 +852,7 @@ import { loadPanel } from './panels.js';
       // Clear any pending transitions from + → arrow swap
       submitBtn.classList.remove('anim-spin', 'anim-spin-swap', 'anim-land', 'mic-mode', 'newchat-mode', 'newchat-expanded', 'recording');
       // Ensure arrow icon is showing before launch
-      var icons = window._sabsabsaBtnIcons;
+      var icons = window._sabBtnIcons;
       if (icons) submitBtn.innerHTML = icons.send;
       void submitBtn.offsetWidth;
       // Arrow launches up, then stop icon lands in
@@ -890,7 +890,7 @@ import { loadPanel } from './panels.js';
       if (window._updateSendBtnIcon) {
         setTimeout(window._updateSendBtnIcon, 50);
       } else {
-        var icons = window._sabsabsaBtnIcons;
+        var icons = window._sabBtnIcons;
         submitBtn.innerHTML = icons ? icons.send : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
         submitBtn.title = 'Send message';
         submitBtn.classList.remove('mic-mode', 'newchat-mode');
@@ -904,7 +904,7 @@ import { loadPanel } from './panels.js';
 
   // API key pattern for the guard in handleChatSubmit
   const API_KEY_RE = /^(sk-[a-zA-Z0-9_\-]{20,}|gsk_[a-zA-Z0-9]{20,}|AIza[a-zA-Z0-9_\-]{30,}|xai-[a-zA-Z0-9]{20,})$/;
-  const PLAN_STORAGE_KEY = 'sabsabsa-active-plan';
+  const PLAN_STORAGE_KEY = 'sab-active-plan';
 
   const _queuedAgentRequests = [];
   let _queuedDrainTimer = null;
@@ -956,8 +956,8 @@ import { loadPanel } from './panels.js';
 	      const approved = _getStoredPlan() || _extractPlanText(plan);
 	      if (!approved.trim()) return;
 	      _pendingApprovedPlan = approved;
-	      if (window.__sabsabsaSetPlanMode) window.__sabsabsaSetPlanMode(false);
-	      if (window.__sabsabsaSetChatMode) window.__sabsabsaSetChatMode('agent');
+	      if (window.__sabSetPlanMode) window.__sabSetPlanMode(false);
+	      if (window.__sabSetChatMode) window.__sabSetChatMode('agent');
 	      _setComposerAndSend('Execute the approved plan.');
 	    });
 	    actions.querySelector('.plan-inline-clear')?.addEventListener('click', () => {
@@ -1125,9 +1125,9 @@ import { loadPanel } from './panels.js';
     // If currently streaming, keyboard Enter can queue a non-empty composer.
     // Clicking the stop icon should still stop normally, even if text exists.
     if (isStreaming) {
-      const queueRequestedAt = Number(window.__sabsabsaQueueStreamingSubmit || 0);
+      const queueRequestedAt = Number(window.__sabQueueStreamingSubmit || 0);
       const shouldQueueStreamingSubmit = queueRequestedAt && Date.now() - queueRequestedAt < 1200;
-      window.__sabsabsaQueueStreamingSubmit = 0;
+      window.__sabQueueStreamingSubmit = 0;
       if (shouldQueueStreamingSubmit && queueStreamingComposerRequest()) {
         return;
       }
@@ -1330,7 +1330,7 @@ import { loadPanel } from './panels.js';
 
     const selectedRouteForSend = (() => {
       try {
-        const lastPicked = window.__sabsabsaLastPickedRoute || null;
+        const lastPicked = window.__sabLastPickedRoute || null;
         if (lastPicked && lastPicked.model && Date.now() - (lastPicked.picked_at || 0) < 10 * 60 * 1000) {
           return {
             model: lastPicked.model || '',
@@ -1383,10 +1383,10 @@ import { loadPanel } from './panels.js';
       // Auto-create a session using default chat config. Always fetch fresh
       // so that a recent Settings change takes effect without a page reload.
       try {
-        let dc = (typeof window !== 'undefined' && window.__sabsabsaDefaultChat) || null;
+        let dc = (typeof window !== 'undefined' && window.__sabDefaultChat) || null;
         if (!dc || !dc.endpoint_url || !dc.model) {
           try {
-            dc = JSON.parse(localStorage.getItem('sabsabsa-default-chat-cache') || 'null');
+            dc = JSON.parse(localStorage.getItem('sab-default-chat-cache') || 'null');
           } catch (_) {}
         }
         try {
@@ -1397,13 +1397,13 @@ import { loadPanel } from './panels.js';
             _sendPerf.mark('default_chat_fetch_done');
             if (dc && dc.endpoint_url && dc.model) {
               try {
-                window.__sabsabsaDefaultChat = dc;
-                localStorage.setItem('sabsabsa-default-chat-cache', JSON.stringify(dc));
+                window.__sabDefaultChat = dc;
+                localStorage.setItem('sab-default-chat-cache', JSON.stringify(dc));
               } catch (_) {}
             }
           }
         } catch (_) {
-          dc = (typeof window !== 'undefined' && window.__sabsabsaDefaultChat) || null;
+          dc = (typeof window !== 'undefined' && window.__sabDefaultChat) || null;
         }
         if (dc.endpoint_url && dc.model) {
           _sendPerf.mark('direct_chat_create_begin');
@@ -1477,7 +1477,7 @@ import { loadPanel } from './panels.js';
     _sendInFlight = false;
 
     try {
-      const pendingSwitch = window.__sabsabsaModelSwitchPromise;
+      const pendingSwitch = window.__sabModelSwitchPromise;
       if (pendingSwitch && typeof pendingSwitch.then === 'function') {
         await pendingSwitch;
       }
@@ -1493,7 +1493,7 @@ import { loadPanel } from './panels.js';
 
     // Acquire Web Lock to hint browser not to discard this tab while streaming
     if (navigator.locks) {
-      navigator.locks.request('sabsabsa-stream-' + streamSessionId, { mode: 'exclusive', ifAvailable: true }, lock => {
+      navigator.locks.request('sab-stream-' + streamSessionId, { mode: 'exclusive', ifAvailable: true }, lock => {
         if (!lock) return; // Another stream already holds a lock — fine
         return new Promise(resolve => { _webLockRelease = resolve; });
       }).catch(e => console.warn('web lock acquire failed:', e)); // Ignore lock errors — best-effort
@@ -1862,7 +1862,7 @@ import { loadPanel } from './panels.js';
       // resolve to the email the user is actually looking at instead of
       // making the agent invent a new markdown draft with fake headers.
       try {
-        const getEmailCtx = window.__sabsabsaGetActiveEmailContext;
+        const getEmailCtx = window.__sabGetActiveEmailContext;
         const emCtx = typeof getEmailCtx === 'function' ? getEmailCtx() : null;
         if (activeEmailComposerCtx && activeEmailComposerCtx.sourceUid) {
           fd.append('active_email_uid', String(activeEmailComposerCtx.sourceUid));
@@ -2132,7 +2132,7 @@ import { loadPanel } from './panels.js';
         enableResearchBtn();
         return;
       }
-      const streamRunId = res.headers.get('X-Sabsabsa-Run-Id') || '';
+      const streamRunId = res.headers.get('X-SAB-Run-Id') || '';
       if (streamRunId) _rememberStreamRunId(streamSessionId, streamRunId, streamGeneration);
 
       // Mark the chat log busy while streaming so screen readers wait for the
@@ -4645,7 +4645,7 @@ import { loadPanel } from './panels.js';
             if (_box && sessionModule.getCurrentSessionId() === _timeoutSessionId) {
               var _timeoutMsg = document.createElement('div');
               _timeoutMsg.className = 'msg msg-ai';
-              _timeoutMsg.innerHTML = '<div class="role">Sabsabsa</div><div class="body" style="opacity:0.6;font-style:italic;">Research clarification timed out. Toggle research again to start over.</div>';
+              _timeoutMsg.innerHTML = '<div class="role">SAB</div><div class="body" style="opacity:0.6;font-style:italic;">Research clarification timed out. Toggle research again to start over.</div>';
               _box.appendChild(_timeoutMsg);
               uiModule.scrollHistory();
             }
@@ -4958,7 +4958,7 @@ import { loadPanel } from './panels.js';
       return false;
     }
     if (!res.ok || !res.body) return false;
-    const resumeRunId = res.headers.get('X-Sabsabsa-Run-Id') || '';
+    const resumeRunId = res.headers.get('X-SAB-Run-Id') || '';
     if (resumeRunId) _streamRunIds.set(sessionId, resumeRunId);
 
     const box = document.getElementById('chat-history');
@@ -6714,7 +6714,7 @@ import { loadPanel } from './panels.js';
   // streaming, history-rendered, compare-mode, all of them. Re-attaching
   // per-node listeners on every innerHTML rewrite was the source of the
   // "needs many clicks" bug.
-  if (!window.__sabsabsa_thread_click_bound) {
+  if (!window.__sab_thread_click_bound) {
     document.body.addEventListener('click', (e) => {
       const header = e.target.closest('.agent-thread-header');
       if (!header) return;
@@ -6731,7 +6731,7 @@ import { loadPanel } from './panels.js';
         }
       }
     });
-    window.__sabsabsa_thread_click_bound = true;
+    window.__sab_thread_click_bound = true;
   }
 
   export default chatModule;

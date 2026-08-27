@@ -213,7 +213,7 @@ function _emailWritingStyleHtml(style) {
       <div class="email-settings-section-head">
         <div>
           <div class="email-settings-section-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Email Reply Writing Style</span></div>
-          <div class="email-settings-section-desc">Used when Sabsabsa drafts replies for you.</div>
+          <div class="email-settings-section-desc">Used when SAB drafts replies for you.</div>
         </div>
       </div>
       <label class="email-settings-field">
@@ -522,7 +522,7 @@ function _applyTagFilterFromPill(tag) {
   });
 }
 
-document.addEventListener('sabsabsa:email-filter-tag', (e) => {
+document.addEventListener('sab:email-filter-tag', (e) => {
   _applyTagFilterFromPill(e.detail?.tag);
 });
 
@@ -606,7 +606,7 @@ function _getActiveEmailContext() {
 
 // Frontend reads via the global so chat.js doesn't need a separate import
 // path (emailLibrary loads lazily in some entry points).
-try { window.__sabsabsaGetActiveEmailContext = _getActiveEmailContext; } catch (_) {}
+try { window.__sabGetActiveEmailContext = _getActiveEmailContext; } catch (_) {}
 
 const _COPY_EMAIL_ICON = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 
@@ -1002,7 +1002,7 @@ async function _loadEmailReminderBellVisibility() {
 }
 // Live-update the bell when the reminder channel changes in Settings,
 // so the user doesn't have to reopen Email to see the change apply.
-window.addEventListener('sabsabsa-reminder-channel-changed', (e) => {
+window.addEventListener('sab-reminder-channel-changed', (e) => {
   const ch = e?.detail?.channel;
   _syncEmailReminderBellVisibility(ch === 'email');
 });
@@ -1794,9 +1794,9 @@ function _rememberedEmailAccountId() {
 const _libListCache = new Map();
 const _LIB_CACHE_MAX = 24;
 const _LIB_INITIAL_PAGE_SIZE = 100;
-const _LIB_SESSION_CACHE_PREFIX = 'sabsabsa.email.list.';
+const _LIB_SESSION_CACHE_PREFIX = 'sab.email.list.';
 const _LIB_SESSION_CACHE_TTL_MS = 10 * 60 * 1000;
-const _LIB_LAST_ACCOUNT_KEY = 'sabsabsa.email.lastAccountId';
+const _LIB_LAST_ACCOUNT_KEY = 'sab.email.lastAccountId';
 const _LIB_PREWARM_COOLDOWN_MS = 5 * 60 * 1000;
 let _libPrewarmDelayTimer = null;
 let _libPrewarmIdleHandle = null;
@@ -2107,8 +2107,8 @@ function _initMobileEmailPullRefresh() {
 
 function _isChatInteractionBusy() {
   try {
-    if (window.__sabsabsaChatBusy) return true;
-    const until = Number(window.__sabsabsaChatBusyUntil || 0);
+    if (window.__sabChatBusy) return true;
+    const until = Number(window.__sabChatBusyUntil || 0);
     return until > Date.now();
   } catch (_) {
     return false;
@@ -2220,10 +2220,10 @@ function _scheduleEmailPrewarm(task, { delay = 0 } = {}) {
     }
   }
 
-  window.addEventListener('sabsabsa:chat-busy-change', handlePriorityChange);
+  window.addEventListener('sab:chat-busy-change', handlePriorityChange);
   document.addEventListener('visibilitychange', handlePriorityChange);
   _libPrewarmDetachPriorityListeners = () => {
-    window.removeEventListener('sabsabsa:chat-busy-change', handlePriorityChange);
+    window.removeEventListener('sab:chat-busy-change', handlePriorityChange);
     document.removeEventListener('visibilitychange', handlePriorityChange);
   };
 
@@ -2456,7 +2456,7 @@ function _libCacheWriteBack() {
 // Expose the active account id to other modules (document.js uses this when sending).
 // Simple global rather than cross-module import to keep coupling minimal.
 function _publishActiveAccount() {
-  try { window.__sabsabsaActiveEmailAccount = state._libAccountId || null; } catch (_) {}
+  try { window.__sabActiveEmailAccount = state._libAccountId || null; } catch (_) {}
   try {
     if (state._libAccountId) localStorage.setItem(_LIB_LAST_ACCOUNT_KEY, state._libAccountId);
   } catch (_) {}
@@ -2632,7 +2632,7 @@ export function openEmailLibrary(opts = {}) {
               <button class="memory-toolbar-btn email-filter-settings-btn" id="email-lib-settings-btn" title="Email settings" aria-label="Email settings" aria-expanded="false">
                 ${_EMAIL_SETTINGS_ICON}
               </button>
-              <button class="memory-toolbar-btn email-reminders-clear-btn hidden" id="email-reminders-clear-btn" title="Permanently delete Sabsabsa reminder emails">
+              <button class="memory-toolbar-btn email-reminders-clear-btn hidden" id="email-reminders-clear-btn" title="Permanently delete SAB reminder emails">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
                 Clear
               </button>
@@ -2648,7 +2648,7 @@ export function openEmailLibrary(opts = {}) {
               <button class="memory-toolbar-btn email-undone-toggle email-undone-toggle-inline" id="email-undone-btn" title="Show only emails not marked as done (undone)">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
-              <button class="memory-toolbar-btn email-reminder-toggle-inline hidden" id="email-reminder-btn" title="Show Sabsabsa reminder emails">
+              <button class="memory-toolbar-btn email-reminder-toggle-inline hidden" id="email-reminder-btn" title="Show SAB reminder emails">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>
               </button>
               <button class="memory-toolbar-btn email-attach-toggle email-attach-toggle-inline" id="email-attach-btn" title="Show only emails with attachments">
@@ -2821,22 +2821,22 @@ export function openEmailLibrary(opts = {}) {
     tagsToggle.setAttribute('aria-pressed', String(!!state._libShowTags));
     tagsToggle.addEventListener('click', () => {
       state._libShowTags = !state._libShowTags;
-      localStorage.setItem('sabsabsa.email.showTags', state._libShowTags ? '1' : '0');
+      localStorage.setItem('sab.email.showTags', state._libShowTags ? '1' : '0');
       tagsToggle.classList.toggle('active', !!state._libShowTags);
       tagsToggle.setAttribute('aria-pressed', String(!!state._libShowTags));
       _renderGrid();
-      document.dispatchEvent(new CustomEvent('sabsabsa:email-tags-toggle', { detail: { show: state._libShowTags } }));
+      document.dispatchEvent(new CustomEvent('sab:email-tags-toggle', { detail: { show: state._libShowTags } }));
     });
   }
   document.getElementById('email-reminders-clear-btn')?.addEventListener('click', async () => {
-    const ok = await styledConfirm('Permanently delete all Sabsabsa reminder emails?', {
+    const ok = await styledConfirm('Permanently delete all SAB reminder emails?', {
       confirmText: 'Delete',
       cancelText: 'Cancel',
       danger: true,
     });
     if (!ok) return;
     try {
-      const res = await fetch(`${API_BASE}/api/email/sabsabsa/reminders?permanent=1${_acct()}`, {
+      const res = await fetch(`${API_BASE}/api/email/sab/reminders?permanent=1${_acct()}`, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
@@ -5733,7 +5733,7 @@ async function _toggleCardPreview(card, em) {
 // occasionally splits a single reply into two bogus "turns" by treating a
 // signature/disclaimer as its own message), the user can flip this off to
 // fall back to plain rendering. Survives reloads.
-const _BUBBLES_DISABLED_KEY = 'sabsabsa.email.bubblesDisabled';
+const _BUBBLES_DISABLED_KEY = 'sab.email.bubblesDisabled';
 // Threaded chat-bubble email view is DISABLED for now — too buggy to
 // ship. Force plain-text rendering everywhere by always returning true.
 // Re-enable by restoring the localStorage-backed body + the toggle
@@ -6515,7 +6515,7 @@ function _foldQuotedReplies(html) {
 // Global preference: AI summary panels stay collapsed across every email
 // once the user folds one, and stay expanded once they unfold. Stored in
 // localStorage so the choice survives reloads.
-const _SUMMARY_COLLAPSED_KEY = 'sabsabsa.email.summaryCollapsed';
+const _SUMMARY_COLLAPSED_KEY = 'sab.email.summaryCollapsed';
 function _summaryCollapsedPref() {
   try { return localStorage.getItem(_SUMMARY_COLLAPSED_KEY) === '1'; } catch { return false; }
 }
