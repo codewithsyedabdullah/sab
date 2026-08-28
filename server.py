@@ -7,11 +7,14 @@ import hmac
 import json
 import os
 import platform
+import re
 import secrets
 import shutil
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -423,6 +426,58 @@ async def default_chat():
     return {"endpoint_url": "local", "model": config.llm.model, "endpoint_id": "sab-local"}
 
 
+def _ep_base(base_url: str, ep_kind: str = "api") -> str:
+    return str(base_url or "").rstrip("/")
+
+
+def _probe_endpoint_models(ep: dict):
+    """Probe a stored model endpoint. Returns (online, models, status, error)."""
+    base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+    kind = str(ep.get("endpoint_kind") or "auto").lower()
+    api_key = (ep.get("api_key") or "").strip()
+    is_ollama = bool(re.search(r"localhost:\d|127\.0\.0\.1|ollama", base, re.I))
+    models_list: list[dict] = []
+    try:
+        import requests as _req
+        headers = {"User-Agent": "SAB"}
+        if api_key and not is_ollama:
+            headers["Authorization"] = f"Bearer {api_key}"
+        if is_ollama:
+            r = _req.get(f"{base}/api/tags", headers=headers, timeout=8)
+            if r.ok:
+                raw = r.json().get("models", [])
+                models_list = [{"id": m.get("name") or m.get("model") or m, "name": m.get("name") or m} for m in raw]
+            return (r.ok, models_list, "empty" if r.ok and not models_list else ("ok" if r.ok else "offline"), None)
+        # OpenAI-compatible
+        if base.endswith("/v1"):
+            url = base + "/models"
+        else:
+            url = base + "/v1/models"
+        r = _req.get(url, headers=headers, timeout=8)
+        if r.ok:
+            data = r.json()
+            raw = data.get("data") or data.get("models") or []
+            if isinstance(raw, list):
+                for m in raw:
+                    if isinstance(m, str):
+                        models_list.append({"id": m, "name": m})
+                    elif isinstance(m, dict):
+                        mid = m.get("id")
+                        if mid:
+                            models_list.append({"id": mid, "name": m.get("name") or mid})
+        return (r.ok, models_list, "empty" if r.ok and not models_list else ("ok" if r.ok else "offline"), None)
+    except Exception as e:
+        return (False, models_list, "offline", str(e))
+
+
+def _resolve_endpoint(endpoint_id: str) -> dict | None:
+    endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    for ep in endpoints:
+        if str(ep.get("id")) == str(endpoint_id):
+            return ep
+    return None
+
+
 @app.get("/api/models")
 async def models():
     try:
@@ -430,7 +485,7 @@ async def models():
         r = await asyncio.to_thread(lambda: _req.get("http://localhost:11434/api/tags", timeout=3))
         if r.ok:
             data = r.json().get("models", [])
-            return {"items": [{
+            items = [{
                 "id": "sab-local",
                 "name": "Ollama Local",
                 "url": "http://localhost:11434",
@@ -439,19 +494,45 @@ async def models():
                 "endpoint_url": "http://localhost:11434",
                 "models": [m["name"] for m in data],
                 "models_display": [m["name"] for m in data],
-            }]}
+            }]
+        else:
+            items = []
     except Exception:
-        pass
-    return {"items": [{
-        "id": "sab-local",
-        "name": "SAB Local",
-        "url": "http://localhost:11434",
-        "endpoint_id": "sab-local",
-        "endpoint_name": "SAB Local",
-        "endpoint_url": "http://localhost:11434",
-        "models": [config.llm.model],
-        "models_display": [config.llm.model],
-    }]}
+        items = []
+    # Merge stored, enabled cloud endpoints (probed)
+    endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    for ep in endpoints:
+        if not ep.get("is_enabled", True):
+            continue
+        base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+        if not base or base.rstrip("/") == "http://localhost:11434":
+            continue
+        online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
+        if not online or not models_list:
+            continue
+        items.append({
+            "id": ep.get("id"),
+            "name": ep.get("name") or base,
+            "url": base,
+            "endpoint_id": ep.get("id"),
+            "endpoint_name": ep.get("name") or base,
+            "endpoint_url": base,
+            "models": [m["id"] for m in models_list],
+            "models_display": [m["id"] for m in models_list],
+            "category": "api",
+        })
+    if not items:
+        items = [{
+            "id": "sab-local",
+            "name": "SAB Local",
+            "url": "http://localhost:11434",
+            "endpoint_id": "sab-local",
+            "endpoint_name": "SAB Local",
+            "endpoint_url": "http://localhost:11434",
+            "models": [config.llm.model],
+            "models_display": [config.llm.model],
+        }]
+    return {"items": items}
 
 
 @app.get("/api/providers")
@@ -462,8 +543,26 @@ async def providers():
 @app.get("/api/model-endpoints")
 async def model_endpoints():
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
-    if not endpoints:
-        endpoints = [{
+    result = []
+    for ep in endpoints:
+        base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+        key = (ep.get("api_key") or "").strip()
+        try:
+            online, models_list, status, err = await asyncio.to_thread(_probe_endpoint_models, ep)
+        except Exception:
+            online, models_list, status, err = False, [], "offline", None
+        enriched = dict(ep)
+        enriched.setdefault("is_enabled", True)
+        enriched["online"] = online
+        enriched["status"] = status
+        enriched["models"] = enriched.get("models") or models_list
+        enriched["models_list"] = enriched.get("models_list") or [m["id"] for m in models_list]
+        enriched["model_count"] = len(models_list)
+        enriched["error"] = err
+        enriched["has_key"] = bool(key)
+        result.append(enriched)
+    if not result:
+        result = [{
             "id": "sab-local",
             "name": "Ollama Local",
             "base_url": "http://localhost:11434",
@@ -471,10 +570,13 @@ async def model_endpoints():
             "models": [{"id": config.llm.model, "name": config.llm.model}],
             "models_list": [config.llm.model],
             "pinned_models": [],
+            "online": True,
+            "status": "ok",
+            "is_enabled": True,
             "offline": False,
             "type": "ollama",
         }]
-    return endpoints
+    return result
 
 
 @app.post("/api/model-endpoints")
@@ -486,9 +588,20 @@ async def create_model_endpoint(request: Request):
     else:
         body = await request.json()
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    if "is_enabled" not in body:
+        body = dict(body)
+        body["is_enabled"] = True
     ep = {"id": _uid(), **body}
     endpoints.append(ep)
     _save_json(DATA_DIR / "model_endpoints.json", endpoints)
+    # Probe immediately so the caller sees online/models/status
+    online, models_list, status, err = await asyncio.to_thread(_probe_endpoint_models, ep)
+    ep["online"] = online
+    ep["status"] = status
+    ep["models"] = models_list
+    ep["models_list"] = [m["id"] for m in models_list]
+    ep["model_count"] = len(models_list)
+    ep["error"] = err
     return ep
 
 
@@ -502,7 +615,13 @@ async def delete_model_endpoint(id: str):
 
 @app.patch("/api/model-endpoints/{id}")
 async def patch_model_endpoint(id: str, request: Request):
-    body = await request.json()
+    body = {}
+    try:
+        raw = await request.body()
+        if raw:
+            body = json.loads(raw)
+    except Exception:
+        body = {}
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
     for e in endpoints:
         if e.get("id") == id:
@@ -513,12 +632,20 @@ async def patch_model_endpoint(id: str, request: Request):
 
 @app.get("/api/model-endpoints/{id}/models")
 async def endpoint_models(id: str, refresh: bool = False):
-    return {"models": [{"id": config.llm.model, "name": config.llm.model}]}
+    ep = _resolve_endpoint(id)
+    if not ep:
+        return {"models": []}
+    online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
+    return {"models": models_list, "online": online}
 
 
 @app.post("/api/model-endpoints/{id}/models")
 async def refresh_endpoint_models(id: str):
-    return {"models": [{"id": config.llm.model, "name": config.llm.model}]}
+    ep = _resolve_endpoint(id)
+    if not ep:
+        return {"models": []}
+    online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
+    return {"models": models_list, "online": online}
 
 
 @app.get("/api/model-endpoints/{id}/dependents")
@@ -528,7 +655,11 @@ async def endpoint_dependents(id: str):
 
 @app.get("/api/model-endpoints/{id}/probe")
 async def probe_endpoint(id: str):
-    return {"ok": True, "latency_ms": 10}
+    ep = _resolve_endpoint(id)
+    if not ep:
+        return {"ok": False, "online": False, "error": "endpoint not found"}
+    online, models_list, _status, err = await asyncio.to_thread(_probe_endpoint_models, ep)
+    return {"ok": online, "online": online, "models": [m["id"] for m in models_list], "error": err}
 
 
 @app.get("/api/model-endpoints/probe-local")
@@ -543,7 +674,18 @@ async def probe_local():
 
 @app.post("/api/model-endpoints/test")
 async def test_endpoint(request: Request):
-    return {"ok": True}
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    url = (body.get("base_url") or body.get("url") or "").strip()
+    key = (body.get("api_key") or "").strip()
+    if not url:
+        return {"ok": False, "error": "no url"}
+    ep = {"base_url": url, "api_key": key, "endpoint_kind": body.get("endpoint_kind", "api")}
+    online, models_list, _status, err = await asyncio.to_thread(_probe_endpoint_models, ep)
+    return {"ok": online, "online": online, "models": [m["id"] for m in models_list], "error": err}
 
 
 @app.get("/api/discover")
@@ -862,29 +1004,31 @@ async def resume_chat(sid: str):
 @app.post("/api/chat_stream")
 async def chat_stream(request: Request):
     ct = request.headers.get("content-type", "")
+    params = {}
     if "form" in ct:
         form = await request.form()
-        message = str(form.get("message", ""))
-        session_id = str(form.get("session", "") or form.get("session_id", ""))
-        mode = str(form.get("mode", "chat"))
+        params = dict(form)
     else:
         try:
             body = await request.json()
-            message = str(body.get("message", ""))
-            session_id = str(body.get("session", "") or body.get("session_id", ""))
-            mode = str(body.get("mode", "chat"))
+            params = body if isinstance(body, dict) else {}
         except Exception:
             form = await request.form()
-            message = str(form.get("message", ""))
-            session_id = str(form.get("session", "") or form.get("session_id", ""))
-            mode = str(form.get("mode", "chat"))
+            params = dict(form)
+
+    message = str(params.get("message", ""))
+    session_id = str(params.get("session", "") or params.get("session_id", ""))
+    mode = str(params.get("mode", "chat"))
+    selected_model = str(params.get("selected_model", "")).strip()
+    selected_endpoint_id = str(params.get("selected_endpoint_id", "")).strip()
+    selected_endpoint_url = str(params.get("selected_endpoint_url", "")).strip()
 
     if not session_id:
         session_id = _uid()
         sessions = _load_sessions()
         sessions.append({
             "id": session_id, "name": message[:40] if message else "New Chat",
-            "model": config.llm.model, "created_at": _now(), "updated_at": _now(),
+            "model": selected_model or config.llm.model, "created_at": _now(), "updated_at": _now(),
             "important": False, "archived": False, "folder": None, "metadata": {},
         })
         _save_sessions(sessions)
@@ -894,7 +1038,31 @@ async def chat_stream(request: Request):
     stop_event = asyncio.Event()
     active_streams[session_id] = stop_event
 
-    agent = Agent(config)
+    # Resolve the selected model endpoint (stored cloud endpoint) so the
+    # Agent's LLM talks to it (OpenAI-compatible /v1/chat/completions),
+    # else fall back to the default local Ollama config.
+    endpoint_override = None
+    if selected_endpoint_id:
+        ep = _resolve_endpoint(selected_endpoint_id)
+        if ep:
+            base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+            ep_kind = str(ep.get("endpoint_kind") or "auto").lower()
+            endpoint_override = {
+                "base_url": base,
+                "model": selected_model or ep.get("model") or config.llm.model,
+                "api_key": (ep.get("api_key") or "").strip() or None,
+                "kind": ep_kind,
+            }
+    elif selected_endpoint_url:
+        base = _ep_base(selected_endpoint_url, "api")
+        endpoint_override = {
+            "base_url": base,
+            "model": selected_model or config.llm.model,
+            "api_key": None,
+            "kind": "api",
+        }
+
+    agent = Agent(config, endpoint=endpoint_override)
     running_agents[session_id] = agent
 
     async def generate():
@@ -910,6 +1078,8 @@ async def chat_stream(request: Request):
                         if stop_event.is_set():
                             break
                         loop.call_soon_threadsafe(queue.put_nowait, event)
+                except Exception as e:
+                    loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": str(e)})
                 finally:
                     loop.call_soon_threadsafe(queue.put_nowait, None)
 
@@ -930,6 +1100,9 @@ async def chat_stream(request: Request):
                     yield f"data: {json.dumps({'type': 'tool_start', 'tool': event['name'], 'arguments': event.get('arguments', {})})}\n\n"
                 elif event["type"] == "tool_result":
                     yield f"data: {json.dumps({'type': 'tool_output', 'tool': event['name'], 'output': event.get('output', '')[:2000]})}\n\n"
+                elif event["type"] == "error":
+                    yield f"event: error\ndata: {json.dumps({'status': 502, 'message': event.get('message', 'LLM error')})}\n\n"
+                    break
 
             yield "data: [DONE]\n\n"
 
@@ -3460,10 +3633,143 @@ async def skills_audit_all_status():
 async def skills_audit_all_cancel():
     return {"ok": True}
 
+def _gh_fetch_json(url: str, timeout: float = 20.0):
+    token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()
+    req = urllib.request.Request(url, headers={"User-Agent": "SAB-skill-importer"})
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _gh_contents(owner: str, repo: str, ref: str, path: str):
+    api = f"https://api.github.com/repos/{owner}/{repo}/contents"
+    if path:
+        api += "/" + urllib.parse.quote(path, safe="/")
+    if ref:
+        api += "?ref=" + urllib.parse.quote(ref)
+    return _gh_fetch_json(api)
+
+
+def _parse_skill_frontmatter(text: str):
+    data = {}
+    body = text
+    stripped = text.lstrip("\ufeff\n\r ")
+    if stripped.startswith("---"):
+        end = stripped.find("\n---", 3)
+        if end != -1:
+            block = stripped[3:end]
+            body = stripped[end + 4:].lstrip("\n\r")
+            try:
+                import yaml
+                parsed = yaml.safe_load(block) or {}
+                if isinstance(parsed, dict):
+                    data = parsed
+            except Exception:
+                data = {}
+                for line in block.splitlines():
+                    if ":" in line:
+                        k, _, v = line.partition(":")
+                        data[k.strip().lower()] = v.strip().strip("'\"").strip()
+    return data, body
+
+
+def _skill_name_from(data: dict, fallback: str):
+    raw = str(data.get("name") or data.get("title") or fallback or "imported").strip()
+    raw = raw.replace(" ", "-").replace("_", "-").lower()
+    safe = "".join(c for c in raw if c.isalnum() or c in "-_")
+    return (safe or "imported")
+
+
+def _import_gh_skill(url: str):
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.netloc or "").lower()
+    if "github.com" not in host and "raw.githubusercontent.com" not in host:
+        raise ValueError("Only GitHub URLs are supported.")
+    seg = [s for s in parsed.path.split("/") if s]
+    if not seg:
+        raise ValueError("Could not parse GitHub URL.")
+    if host.startswith("raw.githubusercontent.com"):
+        if len(seg) < 3:
+            raise ValueError("Raw URL must point to a repo file.")
+        owner, repo, ref = seg[0], seg[1], seg[2]
+        path = "/".join(seg[3:])
+    else:
+        if seg[0].startswith("blob"):  # github.com/blob/...
+            raise ValueError("Unsupported GitHub URL format.")
+        if len(seg) < 2:
+            raise ValueError("GitHub URL must include owner and repo.")
+        owner, repo = seg[0], seg[1]
+        ref, path = "HEAD", ""
+        if len(seg) >= 3 and seg[2] in ("tree", "blob"):
+            kind = seg[2]
+            if len(seg) >= 4:
+                ref = seg[3]
+            path = "/".join(seg[4:])
+            if kind == "blob" and not path.lower().endswith((".md", ".markdown")):
+                raise ValueError("Blob URL must point to a markdown file.")
+        elif len(seg) >= 3:
+            ref, path = seg[2], "/".join(seg[3:])
+    if not path.lower().endswith((".md", ".markdown")):
+        path = (path + "/SKILL.md") if path else "SKILL.md"
+    return _import_gh_path(owner, repo, ref, path)
+
+
+def _import_gh_path(owner: str, repo: str, ref: str, file_path: str):
+    # If the request looks like a directory (or the path missing the file),
+    # list the directory and pick SKILL.md.
+    item = _gh_contents(owner, repo, ref, file_path)
+    if isinstance(item, list):
+        md = next((f for f in item if f.get("name", "").lower() in ("skill.md", "skill.markdown")), None)
+        if not md:
+            raise ValueError("No SKILL.md found in that folder.")
+        item = md
+    if isinstance(item, dict):
+        if "content" in item and item.get("encoding") == "base64":
+            md_text = base64.b64decode(item["content"]).decode("utf-8", errors="replace")
+        else:
+            raise ValueError("Could not read SKILL.md content.")
+    else:
+        raise ValueError("Could not resolve the SKILL.md file.")
+    fm, body = _parse_skill_frontmatter(md_text)
+    name = _skill_name_from(fm, os.path.splitext(os.path.basename(file_path))[0])
+    fpath = SKILLS_DIR / f"{name}.md"
+    fpath.write_text(md_text, encoding="utf-8")
+    record = {
+        "id": _uid(),
+        "name": name,
+        "description": str(fm.get("description") or "").strip(),
+        "when_to_use": str(fm.get("when_to_use") or fm.get("when to use") or "").strip(),
+        "category": str(fm.get("category") or "general").strip(),
+        "tags": fm.get("tags") or [],
+        "status": "published",
+        "source": "imported",
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+    if isinstance(record["tags"], str):
+        record["tags"] = [t.strip() for t in record["tags"].split(",") if t.strip()]
+    skills = _load_json(DATA_DIR / "skills.json", [])
+    skills = [s for s in skills if s.get("name") != name]
+    skills.append(record)
+    _save_json(DATA_DIR / "skills.json", skills)
+    return {"ok": True, "skill": record, "files": 1}
+
+
 @app.post("/api/skills/import-from-url")
 async def skills_import_from_url(request: Request):
-    body = await request.json()
-    return {"ok": True, "skill": {"id": _uid(), "name": body.get("name", "imported")}}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    url = str(body.get("url") or "").strip()
+    if not url:
+        return JSONResponse({"detail": "url is required"}, status_code=400)
+    try:
+        return _import_gh_skill(url)
+    except Exception as e:
+        return JSONResponse({"detail": str(e)}, status_code=400)
+
 
 @app.put("/api/skills/{name}")
 async def skills_update(name: str, request: Request):

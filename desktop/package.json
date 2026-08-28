@@ -1,0 +1,55 @@
+{
+  "name": "sab-desktop",
+  "version": "1.0.0",
+  "description": "SAB desktop app - wraps the local SAB server in a native window",
+  "main": "electron/main.js",
+  "private": true,
+  "license": "MIT",
+  "author": "Syed Abdullah Yaqoob",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "ai.sab.desktop",
+    "productName": "SAB",
+    "files": [
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../server.py",
+        "to": "sab-server/server.py"
+      },
+      {
+        "from": "../static",
+        "to": "sab-server/static"
+      },
+      {
+        "from": "../sab",
+        "to": "sab-server/sab"
+      }
+    ],
+    "win": {
+      "icon": "../static/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "SAB-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "SAB-Portable-${version}.${ext}"
+    }
+  }
+}

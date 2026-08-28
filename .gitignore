@@ -17,3 +17,20 @@ Thumbs.db
 .mypy_cache/
 node_modules/
 sab/web/static/
+
+# Runtime data (auth hashes + stored API keys) - never commit
+data/
+
+# Throwaway audit/test scratch
+test_*.py
+check_*.py
+audit_*.py
+verify_*.py
+deep_audit.py
+do_rebrand.py
+list_routes.py
+analyze_keys.py
+make_icon.py
+tc_*.txt
+tl_*.txt
+*.err

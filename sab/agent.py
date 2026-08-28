@@ -26,9 +26,10 @@ Current workspace: {workspace}
 
 
 class Agent:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, endpoint: dict | None = None):
         self.config = config
-        self.llm = LLM(config.llm)
+        self.llm = LLM(config.llm, override=endpoint)
+        self.endpoint = endpoint or {}
         self.tools: dict[str, Tool] = {t.name: t for t in ALL_TOOLS}
         self.messages: list[dict[str, str]] = []
         self._init_messages()
