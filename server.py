@@ -121,8 +121,24 @@ def _equal_str(a: str, b: str) -> bool:
     return hmac.compare_digest(str(a or ""), str(b or ""))
 
 
+def _normalize_username(username: str) -> str:
+    return str(username or "").strip().lower().replace(" ", "-")
+
+
 def _load_auth() -> dict:
-    return _load_json(AUTH_FILE, {})
+    auth = _load_json(AUTH_FILE, {})
+    # Back-compat: migrate the legacy single-user format to a users map.
+    if "users" not in auth and auth.get("password_hash"):
+        _migrate_legacy_auth(auth)
+    return auth
+
+
+def _migrate_legacy_auth(auth: dict):
+    username = _normalize_username(auth.get("username", "sab")) or "sab"
+    users = {username: {"password_hash": auth.get("password_hash", {}), "is_admin": True}}
+    auth["users"] = users
+    auth.pop("password_hash", None)
+    _save_auth(auth)
 
 
 def _save_auth(auth: dict):
@@ -133,8 +149,21 @@ def _save_auth(auth: dict):
         pass
 
 
+def _auth_users(auth: dict) -> dict:
+    return auth.setdefault("users", {})
+
+
+def _user_record(auth: dict, username: str) -> dict | None:
+    return _auth_users(auth).get(_normalize_username(username))
+
+
 def _auth_configured() -> bool:
-    return AUTH_FILE.exists() and bool(_load_auth().get("password_hash"))
+    return bool(_auth_users(_load_auth()))
+
+
+def _user_is_admin(auth: dict, username: str) -> bool:
+    rec = _user_record(auth, username)
+    return bool(rec and rec.get("is_admin"))
 
 
 def _new_session_token() -> str:
@@ -144,7 +173,7 @@ def _new_session_token() -> str:
 def _issue_session(auth: dict, username: str) -> str:
     token = _new_session_token()
     sessions = auth.setdefault("sessions", {})
-    sessions[token] = {"username": username, "created": _now()}
+    sessions[token] = {"username": _normalize_username(username), "created": _now()}
     _save_auth(auth)
     return token
 
@@ -171,7 +200,7 @@ def _read_session_token(request: Request) -> str:
 
 def _current_user(request: Request) -> str | None:
     if not _auth_configured():
-        return "sab"
+        return None
     token = _read_session_token(request)
     if not token:
         return None
@@ -179,14 +208,29 @@ def _current_user(request: Request) -> str | None:
     sess = auth.get("sessions", {}).get(token)
     if not sess:
         return None
-    return sess.get("username", "sab")
+    return sess.get("username")
+
+
+def _current_user_record(request: Request) -> dict | None:
+    user = _current_user(request)
+    if not user:
+        return None
+    return _user_record(_load_auth(), user)
+
+
+def _current_is_admin(request: Request) -> bool:
+    user = _current_user(request)
+    if not user:
+        return False
+    auth = _load_auth()
+    return _user_is_admin(auth, user)
 
 
 def _auth_enabled() -> bool:
     forced_open = os.getenv("SAB_AUTH_OPEN", "").strip().lower()
     if forced_open in ("1", "true", "yes", "on"):
         return False
-    return _auth_configured()
+    return True
 
 
 def html_escape(s: Any) -> str:
@@ -262,23 +306,23 @@ def _json_or_form(body: Any) -> dict:
 async def auth_status(request: Request):
     configured = _auth_configured()
     user = _current_user(request)
-    authenticated = (not configured) or (user is not None)
-    username = user if user else "sab"
+    authenticated = user is not None
+    is_admin = _current_is_admin(request)
     return {
         "authenticated": authenticated,
         "configured": configured,
-        "signup_enabled": False,
-        "user": {"username": username, "is_admin": True, "display_name": username.upper()} if authenticated else None,
-        "username": username if authenticated else "",
-        "is_admin": authenticated,
-        "display_name": username.upper() if authenticated else "",
+        "signup_enabled": True,
+        "user": {"username": user, "is_admin": is_admin, "display_name": user.upper()} if authenticated else None,
+        "username": user if authenticated else "",
+        "is_admin": is_admin,
+        "display_name": user.upper() if authenticated else "",
         "privileges": [],
     }
 
 
 @app.get("/api/auth/policy")
 async def auth_policy():
-    return {"signup_enabled": False, "password_min_length": 8, "reserved_usernames": ["sab", "admin", "root", "system"]}
+    return {"signup_enabled": True, "password_min_length": 8, "reserved_usernames": ["sab", "admin", "root", "system"]}
 
 
 @app.get("/api/auth/settings")
@@ -2808,15 +2852,14 @@ async def auth_setup(request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    username = str(body.get("username", "sab")).strip().lower() or "sab"
+    username = _normalize_username(body.get("username", "sab")) or "sab"
     password = str(body.get("password", ""))
     if len(password) < 8:
         return JSONResponse({"detail": "Password must be at least 8 characters"}, status_code=400)
-    auth = {
-        "username": username,
-        "password_hash": _hash_password(password),
-        "sessions": {},
-    }
+    if username in ("admin", "root", "system"):
+        return JSONResponse({"detail": "This username is reserved"}, status_code=400)
+    auth = {"users": {}, "sessions": {}}
+    auth["users"][username] = {"password_hash": _hash_password(password), "is_admin": True, "created": _now()}
     _save_auth(auth)
     token = _issue_session(auth, username)
     resp = JSONResponse({"ok": True, "user": {"username": username, "is_admin": True, "display_name": username.upper()}})
@@ -2830,21 +2873,19 @@ async def auth_login(request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    username = str(body.get("username", "sab")).strip().lower()
+    username = _normalize_username(body.get("username", "sab"))
     password = str(body.get("password", ""))
     remember = bool(body.get("remember", False))
     auth = _load_auth()
-    if not auth.get("password_hash"):
-        # Fresh install: only reachable if someone hits login before setup.
-        return JSONResponse({"detail": "No account configured yet"}, status_code=400)
-    configured_user = str(auth.get("username", "sab")).lower()
-    if username != configured_user:
+    rec = _user_record(auth, username)
+    if not rec:
         return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
-    if not _verify_password(password, auth.get("password_hash", {})):
+    if not _verify_password(password, rec.get("password_hash", {})):
         return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
-    token = _issue_session(auth, configured_user)
+    is_admin = bool(rec.get("is_admin"))
+    token = _issue_session(auth, username)
     max_age = 60 * 60 * 24 * 30 if remember else 60 * 60 * 8
-    resp = JSONResponse({"ok": True, "user": {"username": configured_user, "is_admin": True, "display_name": configured_user.upper()}})
+    resp = JSONResponse({"ok": True, "user": {"username": username, "is_admin": is_admin, "display_name": username.upper()}})
     resp.set_cookie("sab_session", token, max_age=max_age, httponly=True, samesite="lax", path="/")
     return resp
 
@@ -2872,11 +2913,12 @@ async def auth_change_password(request: Request):
     old_password = str(body.get("old_password", ""))
     new_password = str(body.get("new_password", ""))
     auth = _load_auth()
-    if not _verify_password(old_password, auth.get("password_hash", {})):
+    rec = _user_record(auth, user)
+    if not rec or not _verify_password(old_password, rec.get("password_hash", {})):
         return JSONResponse({"detail": "Current password is incorrect"}, status_code=400)
     if len(new_password) < 8:
         return JSONResponse({"detail": "New password must be at least 8 characters"}, status_code=400)
-    auth["password_hash"] = _hash_password(new_password)
+    rec["password_hash"] = _hash_password(new_password)
     _save_auth(auth)
     return {"ok": True}
 
@@ -2899,7 +2941,33 @@ async def auth_2fa_disable(request: Request):
 
 @app.post("/api/auth/signup")
 async def auth_signup(request: Request):
-    return JSONResponse({"detail": "Signup is disabled"}, status_code=403)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    username = _normalize_username(body.get("username", "user"))
+    password = str(body.get("password", ""))
+    if not username or len(username) < 3:
+        return JSONResponse({"detail": "Username must be at least 3 characters"}, status_code=400)
+    if username in ("admin", "root", "system", "sab"):
+        return JSONResponse({"detail": "This username is reserved"}, status_code=400)
+    if len(password) < 8:
+        return JSONResponse({"detail": "Password must be at least 8 characters"}, status_code=400)
+    auth = _load_auth()
+    if not _auth_configured():
+        # First account is always admin (acts as setup).
+        rec = {"password_hash": _hash_password(password), "is_admin": True, "created": _now()}
+    else:
+        if username in _auth_users(auth):
+            return JSONResponse({"detail": "Username already exists"}, status_code=409)
+        rec = {"password_hash": _hash_password(password), "is_admin": False, "created": _now()}
+    auth.setdefault("users", {})[username] = rec
+    _save_auth(auth)
+    token = _issue_session(auth, username)
+    is_admin = bool(rec.get("is_admin"))
+    resp = JSONResponse({"ok": True, "user": {"username": username, "is_admin": is_admin, "display_name": username.upper()}})
+    resp.set_cookie("sab_session", token, max_age=60 * 60 * 24 * 30, httponly=True, samesite="lax", path="/")
+    return resp
 
 # ── Auth: integrations ──
 
