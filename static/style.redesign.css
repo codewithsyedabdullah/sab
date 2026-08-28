@@ -1,0 +1,293 @@
+/* ============================================================
+   SAB UI — Visual Redesign Layer
+   ============================================================
+   Additive, layered restyle that keeps every feature and layout
+   working while giving the app a more polished, distinct look.
+   Deliberately uses the SAME theme variables (--bg, --panel,
+   --border, --red, --accent, --color-*) so the built-in theme
+   system (dark/light/presets/customize) keeps recoloring it.
+   Nothing here replaces markup or behavior, only presentation.
+   ============================================================ */
+
+:root {
+  /* Refined radius + shadow tokens used below */
+  --sab-radius-sm: 6px;
+  --sab-radius: 8px;
+  --sab-radius-lg: 12px;
+  --sab-radius-xl: 16px;
+  --sab-card-bg: color-mix(in srgb, var(--panel) 92%, var(--bg));
+  --sab-card-border: color-mix(in srgb, var(--border) 72%, transparent);
+  --sab-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --sab-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.32);
+  --sab-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent, var(--red)) 28%, transparent);
+  --sab-hover: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+/* ------------------------------------------------------------
+   App shell / body canvas
+   ------------------------------------------------------------ */
+body {
+  background-attachment: fixed;
+}
+
+/* ------------------------------------------------------------
+   Sidebar — refined header, brand, list items, sections, user bar
+   ------------------------------------------------------------ */
+.sidebar {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--sidebar-bg, var(--panel)) 97%, var(--accent, var(--red)) 5%),
+      var(--sidebar-bg, var(--panel)) 40%);
+}
+
+.sidebar-header {
+  padding: 16px 14px 10px 14px;
+}
+
+.sidebar-brand {
+  border-radius: var(--sab-radius);
+  padding: 4px 8px;
+  transition: background 0.15s ease;
+}
+
+.sidebar-brand:hover {
+  background: var(--sab-hover);
+}
+
+.sidebar-inner {
+  padding: 8px 10px 14px 10px;
+}
+
+.section-header-flex {
+  border-radius: var(--sab-radius-sm);
+}
+
+.list-item {
+  border-radius: var(--sab-radius-sm);
+  transition: background 0.13s ease, color 0.13s ease, transform 0.06s ease;
+}
+
+.list-item:hover {
+  background: var(--sab-hover);
+}
+
+.list-item:active {
+  transform: translateY(1px);
+}
+
+.list-item-plus-btn,
+.section-header-btn,
+.user-bar-btn,
+.sidebar-hamburger {
+  border-radius: var(--sab-radius-sm);
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.list-item-plus-btn:hover,
+.section-header-btn:hover,
+.user-bar-btn:hover,
+.sidebar-hamburger:hover {
+  background: var(--sab-hover);
+}
+
+/* User bar — subtle separation */
+.sidebar-user-bar {
+  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  padding-top: 10px;
+}
+
+.sidebar-user-bar .user-bar-avatar {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, var(--red)) 35%, transparent);
+}
+
+/* ------------------------------------------------------------
+   Icon rail
+   ------------------------------------------------------------ */
+.icon-rail {
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--panel) 96%, var(--accent, var(--red)) 6%),
+      var(--panel) 45%);
+}
+
+.icon-rail-btn {
+  border-radius: var(--sab-radius);
+  transition: background 0.13s ease, color 0.13s ease, transform 0.06s ease;
+}
+
+.icon-rail-btn:hover {
+  background: var(--sab-hover);
+}
+
+.icon-rail-btn:active {
+  transform: scale(0.92);
+}
+
+/* ------------------------------------------------------------
+   Chat top bar
+   ------------------------------------------------------------ */
+.chat-top-bar {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.chat-new-btn,
+.export-dl-btn,
+.incognito-indicator,
+.tool-indicator {
+  border-radius: var(--sab-radius-sm);
+}
+
+/* ------------------------------------------------------------
+   Chat input bar — softer, defined surface
+   ------------------------------------------------------------ */
+.chat-input-bar {
+  border-radius: var(--sab-radius-xl);
+  box-shadow: var(--sab-shadow-2);
+  background: var(--input-bg, var(--panel));
+}
+
+.chat-input-bar:focus-within {
+  border-color: color-mix(in srgb, var(--accent, var(--red)) 60%, var(--border));
+  box-shadow: var(--sab-focus-ring), var(--sab-shadow-2);
+}
+
+.chat-input-bar textarea#message {
+  border-radius: var(--sab-radius);
+}
+
+/* Attach strip + pills */
+.attach-strip,
+.chat-input-tools {
+  gap: 6px;
+}
+
+/* ------------------------------------------------------------
+   Modals & panels — glassy, refined windows
+   ------------------------------------------------------------ */
+.modal-content {
+  border-radius: var(--sab-radius-lg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--border) 30%, transparent);
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--panel) 90%, #fff 8%),
+      var(--panel) 60%);
+}
+
+.modal-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  padding-bottom: 8px;
+}
+
+.modal-header h4 {
+  display: flex;
+  align-items: center;
+}
+
+.close-btn,
+.modal-close {
+  border-radius: 999px;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.06s ease;
+}
+
+.close-btn:hover,
+.modal-close:hover {
+  transform: rotate(90deg);
+}
+
+/* ------------------------------------------------------------
+   Cards, buttons, inputs, form controls
+   ------------------------------------------------------------ */
+.admin-card,
+.cookbook-card,
+.doclib-card,
+.memory-card,
+.hwfit-card {
+  border-radius: var(--sab-radius);
+  background: var(--sab-card-bg);
+  border: 1px solid var(--sab-card-border);
+  box-shadow: var(--sab-shadow-1);
+}
+
+.btn,
+button[type="button"].btn,
+.admin-btn,
+.send-btn,
+.model-chat-btn,
+.toolbar-btn {
+  border-radius: var(--sab-radius-sm);
+  transition: background 0.13s ease, color 0.13s ease,
+              border-color 0.13s ease, box-shadow 0.13s ease,
+              transform 0.06s ease;
+}
+
+.btn:hover,
+.admin-btn:hover,
+.model-chat-btn:hover,
+.toolbar-btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active,
+.admin-btn:active {
+  transform: translateY(0);
+}
+
+/* Inputs / selects / textareas get a unified focus ring */
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+textarea,
+select {
+  border-radius: var(--sab-radius-sm);
+  transition: border-color 0.13s ease, box-shadow 0.13s ease, background 0.13s ease;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: color-mix(in srgb, var(--accent, var(--red)) 60%, var(--border));
+  box-shadow: var(--sab-focus-ring);
+  outline: none;
+}
+
+/* ------------------------------------------------------------
+   Scrollbars — subtle accent
+   ------------------------------------------------------------ */
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--red) 55%, var(--panel));
+}
+
+/* ------------------------------------------------------------
+   Tooltips
+   ------------------------------------------------------------ */
+[data-tip]:hover::after,
+.tooltip {
+  border-radius: var(--sab-radius-sm);
+}
+
+/* ------------------------------------------------------------
+   Welcome screen
+   ------------------------------------------------------------ */
+#welcome-screen .welcome-logo,
+.welcome-logo svg {
+  filter: drop-shadow(0 6px 18px color-mix(in srgb, var(--accent, var(--red)) 25%, transparent));
+}
+
+/* ------------------------------------------------------------
+   Toast / notification surfaces
+   ------------------------------------------------------------ */
+.toast,
+.notif-toast {
+  border-radius: var(--sab-radius);
+  box-shadow: var(--sab-shadow-2);
+}
+
+/* ------------------------------------------------------------
+   Transitions on section collapse to keep it snappy
+   ------------------------------------------------------------ */
+.section {
+  transition: opacity 0.15s ease;
+}

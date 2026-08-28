@@ -2889,7 +2889,7 @@ function _showEventForm(existing, defaultDate, defaultEndDate) {
             </svg>
             <span>Open in Tasks</span>
           </button>
-          <span style="font-size:11px;opacity:0.5;">Linked to a Cookbook scheduled task</span>
+          <span style="font-size:11px;opacity:0.5;">Linked to a Recipes scheduled task</span>
         </div>`;
       })()}
       <div class="cal-form-row" style="align-items:center;gap:8px;">

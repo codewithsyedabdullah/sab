@@ -2871,7 +2871,7 @@ let _libraryArchivedView = false;   // Documents tab showing archived docs?
           '<div class="hwfit-loading" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">' +
             '<span>No research yet</span>' +
             '<span style="opacity:0.7;font-size:11px;">' +
-              'create one in the <a href="#" data-doclib-open-research style="color:var(--accent,var(--red));text-decoration:underline;">Deep Research</a> tab' +
+              'create one in the <a href="#" data-doclib-open-research style="color:var(--accent,var(--red));text-decoration:underline;">Research</a> tab' +
             '</span>' +
           '</div>';
         grid.querySelector('[data-doclib-open-research]')?.addEventListener('click', (e) => {

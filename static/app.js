@@ -170,13 +170,13 @@ function initRailHoverLabels() {
     'rail-chats': 'Chat',
     'rail-documents': 'Docs',
     'rail-calendar': 'Calendar',
-    'rail-compare': 'Compare',
-    'rail-cookbook': 'Cookbook',
+    'rail-compare': 'Model Arena',
+    'rail-cookbook': 'Recipes',
     'rail-research': 'Research',
     'rail-email': 'Email',
     'rail-gallery': 'Gallery',
-    'rail-archive': 'Library',
-    'rail-memory': 'Brain',
+    'rail-archive': 'Documents',
+    'rail-memory': 'Memory',
     'rail-notes': 'Notes',
     'rail-tasks': 'Tasks',
     'rail-theme': 'Theme',
@@ -931,7 +931,7 @@ function initializeEventListeners() {
     if (active) {
       if (welcomeName) {
         if (!welcomeName.dataset.researchOrigHtml) welcomeName.dataset.researchOrigHtml = welcomeName.innerHTML;
-        welcomeName.innerHTML = _resIco + 'Deep Research';
+        welcomeName.innerHTML = _resIco + 'Research';
       }
       if (welcomeSub) {
         if (!welcomeSub.dataset.researchOrigText) welcomeSub.dataset.researchOrigText = welcomeSub.textContent;
@@ -1911,7 +1911,7 @@ function initializeEventListeners() {
     web: { role: 'Web Search', text: 'Searches the web for relevant information to include in the response. Results are fetched and summarized before the AI answers.' },
     bash: { role: 'Shell Access', text: 'Gives the AI access to a sandboxed shell for running commands, installing packages, and executing scripts. Use with caution.' },
     builder: { role: 'Tool Builder', text: 'Create custom mini-apps and tools the AI can use. Describe what you need and the AI will build a tool you can reuse across conversations.' },
-    research: { role: 'Deep Research', text: 'Multi-round web search with source analysis. Takes longer but produces comprehensive, well-sourced answers. Your next message will trigger a deep research cycle.' },
+    research: { role: 'Research', text: 'Multi-round web search with source analysis. Takes longer but produces comprehensive, well-sourced answers. Your next message will trigger a research cycle.' },
   };
   function _showToolSplash(key) {
     const splash = _toolSplashes[key];

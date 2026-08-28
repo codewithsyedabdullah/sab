@@ -2525,8 +2525,8 @@ const _TOKEN_SCOPES = [
   { key: 'calendar:write',    label: 'Calendar write',    detail: 'Create and update calendar events' },
   { key: 'memory:read',       label: 'Memory read',       detail: 'Read memory when enabled' },
   { key: 'memory:write',      label: 'Memory write',      detail: 'Write memory when enabled' },
-  { key: 'cookbook:read',     label: 'Cookbook read',     detail: 'List cookbook tasks + tail their tmux output' },
-  { key: 'cookbook:launch',   label: 'Cookbook launch',   detail: 'Launch and stop cookbook serve tasks' },
+  { key: 'cookbook:read',     label: 'Recipes read',     detail: 'List recipes tasks + tail their tmux output' },
+  { key: 'cookbook:launch',   label: 'Recipes launch',   detail: 'Launch and stop recipes serve tasks' },
 ];
 
 function _renderTokenScopeRows(t) {
@@ -2755,7 +2755,7 @@ function initWebhookForm() {
 
 /* ── Features ── */
 const featureLabels = {
-  web_search: 'Web Search', deep_research: 'Deep Research',
+  web_search: 'Web Search', deep_research: 'Research',
   memory: 'Memory', document_editor: 'Document Editor', rag: 'RAG Knowledge Base', sensitive_filter: 'Sensitive Info Filter',
   gallery: 'Gallery'
 };
