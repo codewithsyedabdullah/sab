@@ -74,7 +74,8 @@ This means **the privacy of your conversations depends on which AI provider you 
 ## 5. Analytics, tracking, and third-party content
 
 - **SAB does not include analytics, advertising, tracking pixels, or telemetry.** No analytics SDKs or tracking scripts are bundled with the app.
-- **Front-end assets are self-hosted.** All scripts, styles, and fonts (including code highlighting, math rendering, diagram rendering, and fonts) are served from your own SAB server, not from third-party CDNs. This means visiting SAB does not "phone home" to external asset servers.
+- **Front-end assets are self-hosted.** Static scripts, styles, and fonts (including code highlighting, math rendering, diagram rendering, and fonts) are served from your own SAB server, not from third-party CDNs. Visiting the SAB interface does not "phone home" to external asset servers.
+- **One conditional exception:** the optional in-browser **Python code runner** (used to execute Python notebooks/code in the editor) loads the **Pyodide** runtime from *jsdelivr.net* at runtime, on first use. This request only happens if you actually run Python code through that feature; it does not run on ordinary page loads. If you prefer, you can self-host Pyodide or disable that feature. Nothing else in the app fetches third-party resources.
 - The app does not voluntarily transmit usage statistics, diagnostics, or personal data to the makers of SAB.
 
 ---
