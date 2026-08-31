@@ -665,6 +665,35 @@ function createSessionItem(s) {
     selectSession(s.id);
   });
 
+  // Advertised tip: "Right-click a session for rename, delete, and memory
+  // options." Opens the same actions dropdown the menu button shows, anchored
+  // to the cursor. Global _initDropdownDismiss closes it on click-away/Escape.
+  div.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.item-drag-handle') || e.target.closest('.session-fav')
+        || e.target.closest('.hamburger') || e.target.closest('.session-dropdown')
+        || e.target.closest('.session-rename-input') || e.target.closest('.session-select-cb')) return;
+    e.preventDefault();
+    // Close any other open dropdowns
+    document.querySelectorAll('.dropdown').forEach(d => {
+      if (d !== dropdown) d.style.display = 'none';
+    });
+    dropdown.style.display = 'block';
+    dropdown.style.top = '0px';
+    dropdown.style.left = '';
+    dropdown.style.right = '';
+    dropdown.style.width = 'auto';
+    const ddRect = dropdown.getBoundingClientRect();
+    const pad = 8;
+    let x = e.clientX;
+    let y = e.clientY + 4;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (x + ddRect.width > vw - pad) x = vw - ddRect.width - pad;
+    if (y + ddRect.height > vh - pad) y = e.clientY - ddRect.height - 4;
+    dropdown.style.left = Math.max(pad, x) + 'px';
+    dropdown.style.top = Math.max(pad, y) + 'px';
+  });
+
   // Create a dropdown menu button
   const menuBtn = document.createElement('button');
   menuBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';

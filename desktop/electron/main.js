@@ -46,13 +46,20 @@ function sabRoot() {
 }
 
 function pythonPath() {
-  // Allow override, else use `python` on PATH.
-  return process.env.SAB_PYTHON || 'python';
+  // Allow override, else use known-good Python locations on Windows, else `python`.
+  const override = (process.env.SAB_PYTHON || '').trim();
+  if (override) return override;
+  const candidates = ['C:\\Python314\\python.exe', 'C:\\Python313\\python.exe', 'C:\\Python312\\python.exe', 'python'];
+  for (const c of candidates) {
+    if (c === 'python') return 'python';
+    if (fs.existsSync(c)) return c;
+  }
+  return 'python';
 }
 
 function serverReady() {
   return new Promise((resolve) => {
-    const deadline = Date.now() + 45000;
+    const deadline = Date.now() + 60000;
     const probe = () => {
       if (Date.now() > deadline) return resolve(false);
       const req = http.get(START_URL + 'api/auth/status', { timeout: 1500 }, (res) => {
@@ -66,6 +73,15 @@ function serverReady() {
   });
 }
 
+function logPath() {
+  try {
+    const dir = app.getPath('userData');
+    return path.join(dir, 'sab-server.log');
+  } catch (e) {
+    return path.join(require('os').tmpdir(), 'sab-server.log');
+  }
+}
+
 function startServer() {
   const root = sabRoot();
   const serverFile = path.join(root, 'server.py');
@@ -74,14 +90,25 @@ function startServer() {
     app.quit();
     return;
   }
-  serverProc = spawn(pythonPath(), ['-u', serverFile], {
+  const py = pythonPath();
+  const log = logPath();
+  fs.mkdirSync(path.dirname(log), { recursive: true });
+  const logStream = fs.createWriteStream(log, { flags: 'a' });
+  logStream.write('\n[' + new Date().toISOString() + '] launching: ' + py + ' -u ' + serverFile + '\n');
+  serverProc = spawn(py, ['-u', serverFile], {
     cwd: root,
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  serverProc.stdout.on('data', (d) => logStream.write(d));
+  serverProc.stderr.on('data', (d) => logStream.write('[err] ' + d));
   serverProc.on('error', (err) => {
+    logStream.write('server error: ' + err.message + '\n');
     dialog.showErrorBox('SAB', 'Failed to start server: ' + err.message);
     app.quit();
+  });
+  serverProc.on('exit', (code, sig) => {
+    logStream.write('server exited code=' + code + ' sig=' + sig + '\n');
   });
 }
 
@@ -126,6 +153,15 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  mainWindow.webContents.on('did-fail-load', () => {
+    // Server not up yet — retry shortly.
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(START_URL);
+      }
+    }, 1200);
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -166,14 +202,18 @@ function showWindow() {
 app.whenReady().then(async () => {
   if (isWindows && gotLock) app.setAppUserModelId('ai.sab.desktop');
   startServer();
+  // Show the window immediately; it will retry loading until the server is up.
+  createWindow();
+  createTray();
   const ok = await serverReady();
   if (!ok) {
-    dialog.showErrorBox('SAB', 'The SAB server did not start in time. Is Python available?');
+    dialog.showErrorBox('SAB', 'The SAB server did not start in time.\nSee ' + logPath());
     app.quit();
     return;
   }
-  createWindow();
-  createTray();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.loadURL(START_URL);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -104,4 +104,12 @@ sab chat --provider openai --model gpt-4o --api-key sk-xxx
 
 ## License
 
-MIT
+SAB is open-source software distributed under the **MIT License**. See [LICENSE](LICENSE) for the full license text.
+
+## Legal & Community
+
+- [PRIVACY](PRIVACY.md) — how SAB stores and processes your data (self-hosted, plain-text JSON on your server).
+- [TERMS](TERMS.md) — terms of service for using SAB.
+- [NOTICE](NOTICE.md) — third-party attributions.
+- [CONTRIBUTING](CONTRIBUTING.md) — guidance for contributors.
+- [SECURITY](SECURITY.md) — how to report vulnerabilities and operate SAB securely.

@@ -126,10 +126,23 @@ export function initSidebarLayout(Storage, opts) {
   _applyStoredSidebarMode();
   syncRailSide();
 
-  // In-sidebar toggle button — same behavior as hamburger
+  // In-sidebar toggle button — same behavior as hamburger. Shift+click swaps
+  // the sidebar to the other side (matches the advertised "Shift-click the
+  // sidebar toggle to swap it to the other side" tip).
   const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
   if (sidebarToggleBtn) {
     sidebarToggleBtn.addEventListener('click', (e) => {
+      if (e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const sidebar = document.getElementById('sidebar');
+        const wantRight = !(sidebar && sidebar.classList.contains('right-side'));
+        if (sidebar) sidebar.classList.toggle('right-side', wantRight);
+        try { Storage.set(Storage.KEYS.SIDEBAR_SIDE, wantRight ? 'right' : 'left'); } catch (_) {}
+        if (documentModule && documentModule.swapSide) { try { documentModule.swapSide(); } catch (_) {} }
+        syncRailSide();
+        return;
+      }
       if (hamburgerBtn) hamburgerBtn.click();
     });
   }

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import io
 import json
 import os
 import platform
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
@@ -167,6 +169,99 @@ def _auth_configured() -> bool:
 def _user_is_admin(auth: dict, username: str) -> bool:
     rec = _user_record(auth, username)
     return bool(rec and rec.get("is_admin"))
+
+
+# ── TOTP (RFC 6238) enforcement for 2FA ──
+
+def _b32encode(data: bytes) -> str:
+    return base64.b32encode(data).decode("ascii").rstrip("=").upper()
+
+
+def _b32decode(s: str) -> bytes:
+    s = re.sub(r"\s+", "", str(s or "")).upper()
+    pad = (8 - len(s) % 8) % 8
+    return base64.b32decode(s + "=" * pad)
+
+
+def _generate_totp_secret() -> str:
+    return _b32encode(secrets.token_bytes(20))
+
+
+def _totp_at(timestamp: int, secret: str) -> str:
+    counter = int(timestamp // 30).to_bytes(8, "big")
+    digest = hmac.new(_b32decode(secret), counter, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code = (int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF) % 1_000_000
+    return f"{code:06d}"
+
+
+def _verify_totp(secret: str, code: str, window: int = 1) -> bool:
+    code = str(code or "").strip()
+    if not re.fullmatch(r"\d{6}", code):
+        return False
+    now = int(time.time())
+    for i in range(-window, window + 1):
+        if hmac.compare_digest(_totp_at(now + i * 30, secret), code):
+            return True
+    return False
+
+
+def _generate_backup_codes(count: int = 8) -> list[str]:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return ["".join(secrets.choice(alphabet) for _ in range(8)) for _ in range(count)]
+
+
+def _hash_backup_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def _verify_backup_code(rec: dict, code: str) -> bool:
+    code = str(code or "").strip()
+    if not code or len(code) < 6:
+        return False
+    h = _hash_backup_code(code)
+    backups = rec.get("totp_backups") or []
+    for stored in backups:
+        if hmac.compare_digest(str(stored), h):
+            backups.remove(stored)
+            return True
+    return False
+
+
+def _consume_backup_code(auth: dict, username: str, code: str) -> bool:
+    rec = _user_record(auth, username)
+    if not rec or not rec.get("totp_enabled"):
+        return False
+    if _verify_backup_code(rec, code):
+        _save_auth(auth)
+        return True
+    return False
+
+
+def _totp_qr_data_url(secret: str, username: str, issuer: str = "SAB") -> str:
+    otpauth = "otpauth://totp/{}:{}?secret={}&issuer={}".format(
+        urllib.parse.quote(issuer),
+        urllib.parse.quote(username),
+        urllib.parse.quote(secret),
+        urllib.parse.quote(issuer),
+    )
+    try:
+        import qrcode
+        import qrcode.image.pil
+        img = qrcode.make(otpauth)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return ""
+
+
+def _2fa_record(request: Request) -> tuple[dict | None, dict | None]:
+    user = _current_user(request)
+    if not user:
+        return None, None
+    auth = _load_auth()
+    return _user_record(auth, user), auth
 
 
 def _new_session_token() -> str:
@@ -1001,6 +1096,248 @@ async def resume_chat(sid: str):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+# ──────────────────── ATTACHMENT CONTENT (image / audio / files) ────────────────────
+# The frontend uploads files to /api/upload, then sends their ids in the
+# `attachments` field of the chat request. Before the message reaches the model
+# we turn each attachment into model-consumable content: images get a vision/OCR
+# description, audio gets a transcription, and text/pdf files get their contents
+# extracted. Generated vision text is cached under vision_<id>.json so the user's
+# OCR edits (via the photo "Aa" button) are honoured and regeneration is cheap.
+
+_IMAGE_EXTS = ("png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "heic")
+_AUDIO_EXTS = ("mp3", "wav", "ogg", "m4a", "webm", "aac", "flac", "amr", "opus")
+_TEXT_EXTS = (
+    "txt", "md", "markdown", "py", "js", "ts", "jsx", "tsx", "json", "html",
+    "css", "csv", "log", "sh", "bat", "ps1", "toml", "yaml", "yml", "xml",
+    "ini", "cfg", "conf", "sql", "java", "c", "cpp", "h", "rb", "go", "rs",
+    "php", "dockerfile", "gitignore", "env", "lock",
+)
+
+
+def _find_upload_file(att_id: str):
+    for f in UPLOADS_DIR.iterdir():
+        if f.is_file() and f.name.startswith(att_id):
+            return f
+    return None
+
+
+def _ext_kind(name: str) -> str:
+    ext = (Path(name).suffix or "").lower().lstrip(".")
+    if ext in _IMAGE_EXTS:
+        return "image"
+    if ext in _AUDIO_EXTS:
+        return "audio"
+    if ext == "pdf":
+        return "pdf"
+    if ext in _TEXT_EXTS or not ext:
+        return "text"
+    return "other"
+
+
+def _mime_for(name: str) -> str:
+    ext = (Path(name).suffix or "").lower().lstrip(".")
+    return {
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp",
+        "svg": "image/svg+xml", "avif": "image/avif", "heic": "image/heic",
+    }.get(ext, "image/png")
+
+
+def _read_vision_cache(att_id: str) -> dict:
+    f = DATA_DIR / f"vision_{att_id}.json"
+    if f.exists():
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _openai_base(ep: dict | None) -> str:
+    base = _ep_base((ep or {}).get("base_url") or (ep or {}).get("url"), (ep or {}).get("endpoint_kind"))
+    if not base or base.rstrip("/") == "http://localhost:11434":
+        return ""
+    return base.rstrip("/")
+
+
+def _vision_capable_model(chat_model: str, ep: dict | None) -> str:
+    m = (chat_model or "").strip()
+    if not m:
+        m = ((ep or {}).get("model") or "").strip()
+    if not m:
+        return ""
+    ml = m.lower()
+    if any(k in ml for k in ("embedding", "whisper", "tts", "dall-e", "rerank", "moderation", "search", "stt")):
+        return ""
+    # Prefer an explicitly vision-capable model on this endpoint when present.
+    for cand in [m, (ep or {}).get("model") or ""]:
+        cl = (cand or "").lower()
+        if any(k in cl for k in ("vl", "vision", "4o", "5v", "gemini", "gpt-4o")):
+            return cand
+    return m
+
+
+def _generate_vision_text(file, ep: dict | None, chat_model: str) -> tuple[str, str | None]:
+    """Describe an image via a vision-capable model. Tries several content
+    formats (OpenAI image_url, Qwen type:image, Google-style, raw part) so it
+    works across providers. Returns (desc, model_used)."""
+    try:
+        base = _openai_base(ep)
+        if not base:
+            return "", None
+        url = base + "/chat/completions" if base.endswith("/v1") else base + "/v1/chat/completions"
+        api_key = ((ep or {}).get("api_key") or "").strip()
+        model = _vision_capable_model(chat_model, ep)
+        if not model:
+            return "", None
+        b64 = base64.b64encode(file.read_bytes()).decode("utf-8")
+        data_url = f"data:{_mime_for(file.name)};base64,{b64}"
+        prompt = "Describe this image in detail so a text-only model can understand it. Transcribe any visible text verbatim (OCR)."
+        # Candidate content shapes (some providers accept only one of these).
+        variants = [
+            [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": data_url}}],
+            [{"type": "text", "text": prompt}, {"type": "image", "image": data_url}],
+            [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": data_url}],
+            [{"type": "text", "text": prompt}, {"type": "image", "image_url": data_url}],
+            prompt + "\n\n[image data: " + b64 + "]",
+        ]
+        import requests as _req
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        for content in variants:
+            payload = {"model": model, "messages": [{"role": "user", "content": content}], "stream": False, "max_tokens": 800}
+            try:
+                r = _req.post(url, json=payload, headers=headers, timeout=120)
+            except Exception:
+                continue
+            if r.status_code != 200:
+                continue
+            try:
+                data = r.json()
+            except Exception:
+                continue
+            msg = (data.get("choices") or [{}])[0].get("message") or {}
+            content_txt = (msg.get("content") or "").strip()
+            # A model that never ingested the image produces no image tokens and
+            # usually empty/blank content — skip it.
+            usage = data.get("usage") or {}
+            img_tok = usage.get("image_tokens") or 0
+            if img_tok == 0 and not content_txt:
+                continue
+            if content_txt:
+                return content_txt, model
+        return "", None
+    except Exception:
+        return "", None
+
+
+def _transcribe_audio(file, ep: dict | None) -> str:
+    """Transcribe audio via an OpenAI-compatible /audio/transcriptions endpoint."""
+    try:
+        base = _openai_base(ep)
+        if not base:
+            return ""
+        url = base + "/audio/transcriptions"
+        api_key = ((ep or {}).get("api_key") or "").strip()
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        ext = (Path(file.name).suffix or "").lstrip(".")
+        ctype = {"mp3": "audio/mpeg", "wav": "audio/wav", "webm": "audio/webm", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac"}.get(ext, "audio/webm")
+        import requests as _req
+        with open(file, "rb") as fh:
+            r = _req.post(url, headers=headers, files={"file": (file.name, fh, ctype)}, data={"model": "whisper-1"}, timeout=90)
+        if r.status_code != 200:
+            return ""
+        j = r.json()
+        return (j.get("text") or "").strip()
+    except Exception:
+        return ""
+
+
+def _extract_document_text(file, kind: str) -> str:
+    try:
+        if kind == "text":
+            raw = file.read_bytes()
+            for enc in ("utf-8", "utf-16", "latin-1"):
+                try:
+                    text = raw.decode(enc)
+                    break
+                except Exception:
+                    continue
+            else:
+                text = raw.decode("utf-8", errors="replace")
+            text = text.replace("\x00", "").strip()
+            if len(text) > 20000:
+                text = text[:20000] + "\n... (truncated)"
+            return text
+        if kind == "pdf":
+            try:
+                from pypdf import PdfReader
+            except Exception:
+                try:
+                    from PyPDF2 import PdfReader
+                except Exception:
+                    return ""
+            reader = PdfReader(io.BytesIO(file.read_bytes()))
+            parts = []
+            for page in reader.pages[:20]:
+                parts.append(page.extract_text() or "")
+            text = "\n".join(parts).strip()
+            if len(text) > 20000:
+                text = text[:20000] + "\n... (truncated)"
+            return text
+    except Exception:
+        return ""
+    return ""
+
+
+def _inject_attachment_content(message: str, att_ids: list[str], ep: dict | None, chat_model: str) -> str:
+    """Expand attachment ids into model-consumable blocks and append to message."""
+    if not att_ids:
+        return message
+    blocks: list[str] = []
+    for aid in att_ids:
+        f = _find_upload_file(aid)
+        if not f:
+            continue
+        kind = _ext_kind(f.name)
+        if kind == "image":
+            vc = _read_vision_cache(aid)
+            desc = (vc.get("text") or "").strip()
+            vmodel = vc.get("model")
+            if not desc:
+                desc, vmodel = _generate_vision_text(f, ep, chat_model)
+                if desc:
+                    try:
+                        _save_json(DATA_DIR / f"vision_{aid}.json", {"text": desc, "model": vmodel or "auto"})
+                    except Exception:
+                        pass
+            if desc:
+                blocks.append(f"[Image: {f.name}]\n{desc}")
+            else:
+                blocks.append(f"[Image attached: {f.name}]")
+        elif kind == "audio":
+            tr = _transcribe_audio(f, ep)
+            if tr:
+                blocks.append(f"[Audio transcription: {f.name}]\n{tr}")
+            else:
+                blocks.append(f"[Audio attached: {f.name}]")
+        else:
+            text = _extract_document_text(f, kind)
+            if text:
+                ext = Path(f.name).suffix.lstrip(".") or "file"
+                blocks.append(f"=== File: {f.name} ===\n[Type: {ext}]\n\n{text}")
+            else:
+                blocks.append(f"[Attached document file: {f.name}]")
+    if not blocks:
+        return message
+    msg = (message or "").strip()
+    joined = "\n\n".join(blocks)
+    return (msg + "\n\n" + joined) if msg else joined
+
+
 @app.post("/api/chat_stream")
 async def chat_stream(request: Request):
     ct = request.headers.get("content-type", "")
@@ -1022,6 +1359,16 @@ async def chat_stream(request: Request):
     selected_model = str(params.get("selected_model", "")).strip()
     selected_endpoint_id = str(params.get("selected_endpoint_id", "")).strip()
     selected_endpoint_url = str(params.get("selected_endpoint_url", "")).strip()
+
+    attachment_ids: list[str] = []
+    try:
+        _att_raw = params.get("attachments", "")
+        if _att_raw:
+            _att_parsed = json.loads(_att_raw) if isinstance(_att_raw, str) else _att_raw
+            if isinstance(_att_parsed, list):
+                attachment_ids = [str(x) for x in _att_parsed if str(x)]
+    except Exception:
+        attachment_ids = []
 
     if not session_id:
         session_id = _uid()
@@ -1062,6 +1409,19 @@ async def chat_stream(request: Request):
             "kind": "api",
         }
 
+    # Expand attached files (images/audio/documents) into model-consumable
+    # text (vision/OCR description, transcription, or file contents) and append
+    # to the user message so the model actually sees them. Runs off-thread since
+    # it may make network calls to a vision/transcription provider.
+    chat_message = message
+    if attachment_ids:
+        try:
+            chat_message = await asyncio.to_thread(
+                _inject_attachment_content, message, attachment_ids, endpoint_override, selected_model
+            )
+        except Exception:
+            chat_message = message
+
     agent = Agent(config, endpoint=endpoint_override)
     running_agents[session_id] = agent
 
@@ -1074,7 +1434,7 @@ async def chat_stream(request: Request):
 
             def run_agent():
                 try:
-                    for event in agent.run_stream(message):
+                    for event in agent.run_stream(chat_message):
                         if stop_event.is_set():
                             break
                         loop.call_soon_threadsafe(queue.put_nowait, event)
@@ -1454,7 +1814,29 @@ async def skills_markdown(name: str):
 
 @app.get("/api/skills/slash-catalog")
 async def slash_catalog():
-    return []
+    # Expose published skills so chat slash commands (/> and the autocomplete)
+    # can resolve them. Shape matches what the frontend expects: name (used by
+    # the dispatcher to match /<skill-name>), plus token/help/category/uses for
+    # the autocomplete + /skills list.
+    skills = _load_json(DATA_DIR / "skills.json", [])
+    items = []
+    for s in skills:
+        name = (s.get("name") or s.get("id") or "").strip()
+        if not name:
+            continue
+        if s.get("status") != "published":
+            continue
+        items.append({
+            "name": name,
+            "token": "/" + name,
+            "help": s.get("description") or s.get("when_to_use") or "Run skill",
+            "category": s.get("category") or "general",
+            "tags": s.get("tags") or [],
+            "uses": s.get("uses") or 0,
+            "confidence": s.get("confidence") or 0,
+            "updated_at": s.get("updated_at") or s.get("created_at") or "",
+        })
+    return {"skills": items}
 
 
 @app.get("/api/skills/audit/status")
@@ -2895,12 +3277,67 @@ async def assistant_run_status(task_id: str):
 
 @app.get("/api/stt/stats")
 async def stt_stats():
+    ep = _pick_cloud_endpoint()
+    if ep and _openai_base(ep):
+        return {"provider": str(ep.get("base_url") or "").rstrip("/"), "available": True}
     return {"provider": "none", "available": False}
+
+
+def _pick_cloud_endpoint() -> dict | None:
+    """Return the first enabled, non-local, OpenAI-compatible stored endpoint."""
+    try:
+        endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    except Exception:
+        endpoints = []
+    for ep in endpoints or []:
+        if not ep.get("is_enabled", True):
+            continue
+        base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+        if not base or base.rstrip("/") == "http://localhost:11434":
+            continue
+        if _openai_base(ep):
+            return ep
+    return None
 
 
 @app.post("/api/stt/transcribe")
 async def stt_transcribe(request: Request):
-    return {"text": ""}
+    form = await request.form()
+    upload = form.get("file")
+    if not upload or not hasattr(upload, "filename"):
+        for key in form:
+            val = form[key]
+            if hasattr(val, "filename") and val.filename:
+                upload = val
+                break
+    if not upload or not hasattr(upload, "filename"):
+        return JSONResponse({"detail": {"message": "no audio file"}}, status_code=400)
+    data = await upload.read()
+    filename = str(upload.filename) or "audio.webm"
+    ext = Path(filename).suffix.lstrip(".") or "webm"
+    ctype = {"mp3": "audio/mpeg", "wav": "audio/wav", "webm": "audio/webm", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac"}.get(ext, "audio/webm")
+
+    ep = _pick_cloud_endpoint()
+    base = _openai_base(ep) if ep else ""
+    if not base:
+        return JSONResponse({"detail": {"message": "Speech-to-text: no speech-capable endpoint configured. Add a model endpoint (Settings → Endpoints) that provides audio transcriptions."}}, status_code=501)
+    try:
+        import requests as _req
+        url = base + "/audio/transcriptions"
+        headers = {}
+        api_key = ((ep or {}).get("api_key") or "").strip()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        files = {"file": (filename, io.BytesIO(data), ctype)}
+        r = await asyncio.to_thread(
+            lambda: _req.post(url, headers=headers, files=files, data={"model": "whisper-1"}, timeout=120)
+        )
+        if r.status_code != 200:
+            return JSONResponse({"detail": {"message": f"Transcription failed (HTTP {r.status_code})"}}, status_code=502)
+        text = (r.json().get("text") or "").strip()
+        return {"text": text}
+    except Exception as e:
+        return JSONResponse({"detail": {"message": f"Transcription error: {str(e)}"}}, status_code=502)
 
 
 @app.get("/api/tts/stats")
@@ -2949,7 +3386,68 @@ async def personal_reload():
 
 @app.delete("/api/admin/wipe/{kind}")
 async def admin_wipe(kind: str):
-    return JSONResponse({})
+    """Danger Zone wipe. Actually deletes the requested category and reports
+    how many items were removed, so the UI shows a real count."""
+    kind = (kind or "").strip().lower()
+    removed = 0
+
+    def _wipe_list(path):
+        nonlocal removed
+        items = _load_json(path, []) if isinstance(_load_json(path, []), list) else []
+        removed += len(items)
+        _save_json(path, [])
+        return removed
+
+    if kind in ("chats", "sessions"):
+        sessions = _load_sessions()
+        removed += len(sessions)
+        _save_sessions([])
+        if HISTORIES_DIR.exists():
+            for f in HISTORIES_DIR.iterdir():
+                if f.is_file():
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+    elif kind == "memory":
+        _wipe_list(MEMORY_FILE)
+    elif kind == "skills":
+        for f in SKILLS_DIR.iterdir():
+            if f.is_file():
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+        removed = 0
+    elif kind == "notes":
+        _wipe_list(NOTES_FILE)
+    elif kind == "tasks":
+        _wipe_list(TASKS_FILE)
+    elif kind == "documents":
+        _wipe_list(DOCUMENTS_FILE)
+        _wipe_list(DOCUMENTS_LIBRARY_FILE)
+        if UPLOADS_DIR.exists():
+            for f in UPLOADS_DIR.iterdir():
+                if f.is_file():
+                    try:
+                        f.unlink()
+                    except Exception:
+                        pass
+    elif kind == "gallery":
+        removed += len(_load_json(GALLERY_FILE, {"items": []}).get("items", [])) if isinstance(_load_json(GALLERY_FILE, {}), dict) else 0
+        gdata = _load_json(GALLERY_FILE, {"items": []})
+        if isinstance(gdata, dict):
+            gdata["items"] = []
+            _save_json(GALLERY_FILE, gdata)
+        else:
+            _save_json(GALLERY_FILE, [])
+    elif kind == "calendar":
+        cdata = _load_json(CALENDAR_FILE, {"calendars": [], "events": []})
+        removed = len(cdata.get("calendars", [])) if isinstance(cdata, dict) else 0
+        _save_json(CALENDAR_FILE, {"calendars": [], "events": []})
+    else:
+        return JSONResponse({"count": 0, "ok": False, "detail": "unknown kind"})
+    return JSONResponse({"count": removed, "ok": True})
 
 
 @app.get("/api/export")
@@ -3055,6 +3553,18 @@ async def auth_login(request: Request):
         return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
     if not _verify_password(password, rec.get("password_hash", {})):
         return JSONResponse({"detail": "Invalid username or password"}, status_code=401)
+    # Two-factor authentication: if enabled, require a valid TOTP / backup code.
+    if rec.get("totp_enabled"):
+        totp_code = str(body.get("totp_code", "") or "").strip()
+        if not totp_code:
+            return {"requires_totp": True}
+        valid = False
+        if rec.get("totp_secret") and _verify_totp(rec["totp_secret"], totp_code):
+            valid = True
+        elif _consume_backup_code(auth, username, totp_code):
+            valid = True
+        if not valid:
+            return JSONResponse({"detail": "Invalid two-factor authentication code"}, status_code=401)
     is_admin = bool(rec.get("is_admin"))
     token = _issue_session(auth, username)
     max_age = 60 * 60 * 24 * 30 if remember else 60 * 60 * 8
@@ -3097,19 +3607,75 @@ async def auth_change_password(request: Request):
 
 
 @app.get("/api/auth/2fa/status")
-async def auth_2fa_status():
-    return {"enabled": False, "configured": False}
+async def auth_2fa_status(request: Request):
+    rec, _auth = _2fa_record(request)
+    if rec is None:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    return {
+        "enabled": bool(rec.get("totp_enabled")),
+        "configured": bool(rec.get("totp_secret")),
+    }
 
 @app.post("/api/auth/2fa/setup")
-async def auth_2fa_setup():
-    return {"secret": "", "qr_uri": "", "backup_codes": []}
+async def auth_2fa_setup(request: Request):
+    rec, auth = _2fa_record(request)
+    user = _current_user(request)
+    if rec is None or not user:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if rec.get("totp_enabled"):
+        return {"secret": "", "qr_code": "", "backup_codes": [], "already_enabled": True}
+    secret = _generate_totp_secret()
+    rec["totp_secret"] = secret
+    rec["totp_pending"] = True
+    _save_auth(auth)
+    return {
+        "secret": secret,
+        "qr_code": _totp_qr_data_url(secret, user),
+        "backup_codes": [],
+    }
 
 @app.post("/api/auth/2fa/confirm")
 async def auth_2fa_confirm(request: Request):
-    return {"ok": True}
+    rec, auth = _2fa_record(request)
+    if rec is None:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    code = str(body.get("code", ""))
+    secret = rec.get("totp_secret")
+    if not secret:
+        return JSONResponse({"detail": "No 2FA setup in progress"}, status_code=400)
+    if not rec.get("totp_pending"):
+        return JSONResponse({"detail": "No 2FA setup in progress"}, status_code=400)
+    if not _verify_totp(secret, code):
+        return JSONResponse({"detail": "Invalid code. Check the time on your authenticator device."}, status_code=400)
+    rec["totp_pending"] = False
+    rec["totp_enabled"] = True
+    backup_codes = _generate_backup_codes()
+    rec["totp_backups"] = [_hash_backup_code(c) for c in backup_codes]
+    _save_auth(auth)
+    return {"ok": True, "backup_codes": backup_codes}
 
 @app.post("/api/auth/2fa/disable")
 async def auth_2fa_disable(request: Request):
+    rec, auth = _2fa_record(request)
+    user = _current_user(request)
+    if rec is None or not user:
+        return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if not rec.get("totp_enabled"):
+        return {"ok": True}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    password = str(body.get("password", ""))
+    if not _verify_password(password, rec.get("password_hash", {})):
+        return JSONResponse({"detail": "Current password is incorrect"}, status_code=400)
+    for key in ("totp_secret", "totp_pending", "totp_enabled", "totp_backups"):
+        rec.pop(key, None)
+    _save_auth(auth)
     return {"ok": True}
 
 @app.post("/api/auth/signup")
@@ -4014,8 +4580,85 @@ async def tts_clear_cache():
 
 @app.post("/api/probe-selected")
 async def probe_selected(request: Request):
-    body = await request.json()
-    return {"ok": True, "results": []}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    entries = body.get("models") or []
+    results = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        model = str(entry.get("model") or "").strip()
+        ep_id = str(entry.get("endpoint_id") or "").strip()
+        ep_url = str(entry.get("endpoint") or "").strip()
+        with_tools = bool(entry.get("with_tools"))
+        base = ""
+        api_key = ""
+        if ep_id and ep_id != "sab-local":
+            ep = _resolve_endpoint(ep_id)
+            if ep:
+                base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
+                api_key = (ep.get("api_key") or "").strip()
+        if not base and ep_url:
+            base = _ep_base(ep_url, "api")
+        if not base:
+            base = "http://localhost:11434"
+        if not model:
+            results.append({"model": model, "status": "fail", "error": "No model name"})
+            continue
+        results.append(await asyncio.to_thread(_probe_model_once, base, model, api_key, with_tools))
+    return {"ok": True, "results": results}
+
+
+def _probe_model_once(base: str, model: str, api_key: str, with_tools: bool) -> dict:
+    import requests as _req
+    base = str(base or "").rstrip("/")
+    is_ollama = bool(re.search(r"localhost:\d|127\.0\.0\.1|ollama", base, re.I))
+    started = time.monotonic()
+    messages = [{"role": "user", "content": "Reply with exactly: ok"}]
+    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
+    headers = {"User-Agent": "SAB"}
+    tools = [{
+        "type": "function",
+        "function": {"name": "ping", "description": "Echo a word", "parameters": {"type": "object", "properties": {}}},
+    }] if with_tools else None
+    try:
+        if is_ollama:
+            payload["options"] = {"num_predict": 8, "temperature": 0}
+            if tools:
+                payload["tools"] = tools
+            r = _req.post(f"{base}/api/chat", json=payload, headers=headers, timeout=12)
+        else:
+            url = base if base.endswith("/v1") else base + "/v1"
+            payload["max_tokens"] = 8
+            payload["temperature"] = 0
+            if tools:
+                payload["tools"] = tools
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            r = _req.post(f"{url}/chat/completions", json=payload, headers=headers, timeout=12)
+        latency_ms = int((time.monotonic() - started) * 1000)
+        if not r.ok:
+            detail = re.sub(r"\s+", " ", r.text[:200]).strip()
+            return {"model": model, "status": "fail", "latency_ms": latency_ms, "error": f"HTTP {r.status_code}: {detail}"}
+        content = None
+        try:
+            data = r.json()
+            if is_ollama:
+                content = (data.get("message") or {}).get("content")
+            else:
+                choices = data.get("choices") or []
+                if choices:
+                    content = (choices[0].get("message") or {}).get("content")
+        except Exception:
+            content = None
+        if content:
+            return {"model": model, "status": "ok", "latency_ms": latency_ms, "content": str(content)[:60]}
+        return {"model": model, "status": "fail", "latency_ms": latency_ms, "error": "No response"}
+    except Exception as e:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return {"model": model, "status": "fail", "latency_ms": latency_ms, "error": str(e)[:200]}
 
 @app.post("/api/documents/tidy")
 async def documents_tidy(request: Request):
@@ -4106,15 +4749,152 @@ async def shell_stream_post(request: Request):
 async def hwfit_image_models():
     return {"models": []}
 
-# ── ChatGPT subscription device flow stubs ──
+# ── ChatGPT subscription device flow (OpenAI OAuth 2.0 device flow) ──
 
-@app.get("/api/chatgpt-subscription/device/start")
-async def chatgpt_device_start():
-    return {"error": "Not available", "device_code": "", "user_code": "", "verification_uri": ""}
+_chatgpt_device_flows: dict[str, dict] = {}
 
-@app.get("/api/chatgpt-subscription/device/poll")
-async def chatgpt_device_poll():
-    return {"status": "not_started"}
+
+def _store_model_endpoint(ep: dict):
+    endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    endpoints.append(ep)
+    _save_json(DATA_DIR / "model_endpoints.json", endpoints)
+
+
+@app.post("/api/chatgpt-subscription/device/start")
+async def chatgpt_device_start(request: Request):
+    client_id = os.getenv("OPENAI_DEVICE_CLIENT_ID", "").strip()
+    if not client_id:
+        return JSONResponse(
+            {"detail": "ChatGPT subscription sign-in is not configured on this server. Set the "
+             "OPENAI_DEVICE_CLIENT_ID (and OPENAI_DEVICE_CLIENT_SECRET if required) environment "
+             "variables and restart SAB, then retry."},
+            status_code=400,
+        )
+    auth_base = os.getenv("OPENAI_DEVICE_BASE", "https://auth.openai.com").rstrip("/")
+    client_secret = os.getenv("OPENAI_DEVICE_CLIENT_SECRET", "").strip()
+    tenant = os.getenv("OPENAI_DEVICE_TENANT", "chatgpt").strip()
+    scope = os.getenv("OPENAI_DEVICE_SCOPE", "openid email profile offline_access").strip()
+    form = {
+        "client_id": client_id,
+        "scope": scope,
+        "tenant": tenant,
+    }
+    if client_secret:
+        form["client_secret"] = client_secret
+    try:
+        import urllib.parse as _up
+        r = await asyncio.to_thread(
+            lambda: urllib.request.urlopen(
+                urllib.request.Request(
+                    f"{auth_base}/oauth/device/code",
+                    data=_up.urlencode(form).encode("utf-8"),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    method="POST",
+                ),
+                timeout=15,
+            )
+        )
+        data = json.loads(r.read().decode("utf-8"))
+    except Exception as e:
+        return JSONResponse({"detail": f"Failed to start ChatGPT sign-in: {e}"}, status_code=502)
+    poll_id = _uid()
+    _chatgpt_device_flows[poll_id] = {
+        "device_code": data.get("device_code", ""),
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "created": time.time(),
+        "expires_in": int(data.get("expires_in", 900)),
+    }
+    return {
+        "poll_id": poll_id,
+        "user_code": data.get("user_code", ""),
+        "verification_uri": data.get("verification_uri_complete") or data.get("verification_uri", ""),
+        "expires_in": int(data.get("expires_in", 900)),
+        "interval": int(data.get("interval", 5)),
+    }
+
+
+@app.post("/api/chatgpt-subscription/device/poll")
+async def chatgpt_device_poll(request: Request):
+    ct = request.headers.get("content-type", "")
+    params = {}
+    if "form" in ct:
+        form = await request.form()
+        params = dict(form)
+    else:
+        try:
+            body = await request.json()
+            params = body if isinstance(body, dict) else {}
+        except Exception:
+            form = await request.form()
+            params = dict(form)
+    poll_id = str(params.get("poll_id", "") or "")
+    flow = _chatgpt_device_flows.get(poll_id)
+    if not flow:
+        return {"status": "failed", "error": "Sign-in expired. Run /setup chatgpt-subscription again."}
+    if time.time() > flow["created"] + flow["expires_in"]:
+        _chatgpt_device_flows.pop(poll_id, None)
+        return {"status": "expired", "error": "Sign-in expired. Run /setup chatgpt-subscription again."}
+    token_form = {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "device_code": flow["device_code"],
+        "client_id": flow["client_id"],
+    }
+    if flow.get("client_secret"):
+        token_form["client_secret"] = flow["client_secret"]
+    auth_base = os.getenv("OPENAI_DEVICE_BASE", "https://auth.openai.com").rstrip("/")
+    try:
+        req = urllib.request.Request(
+            f"{auth_base}/oauth/token",
+            data=urllib.parse.urlencode(token_form).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        resp = await asyncio.to_thread(
+            lambda: urllib.request.urlopen(req, timeout=15).read().decode("utf-8")
+        )
+        data = json.loads(resp)
+    except urllib.error.HTTPError as e:
+        try:
+            data = json.loads(e.read().decode("utf-8") or "{}")
+        except Exception:
+            data = {"error": "http_error"}
+    except Exception as e:
+        return {"status": "failed", "error": f"Poll failed: {e}"}
+
+    error = data.get("error")
+    if error:
+        if error in ("authorization_pending", "slow_down"):
+            return {"status": "pending", "interval": int(data.get("interval", 5))}
+        _chatgpt_device_flows.pop(poll_id, None)
+        return {"status": "failed", "error": {"access_denied": "Authorization denied on OpenAI.", "expired_token": "Sign-in expired."}.get(error, error)}
+    access_token = data.get("access_token", "")
+    refresh_token = data.get("refresh_token", "")
+    if not access_token:
+        _chatgpt_device_flows.pop(poll_id, None)
+        return {"status": "failed", "error": "No access token returned."}
+
+    _chatgpt_device_flows.pop(poll_id, None)
+    ep = {
+        "id": _uid(),
+        "name": "ChatGPT Subscription",
+        "base_url": "https://api.openai.com/v1",
+        "url": "https://api.openai.com/v1",
+        "endpoint_kind": "api",
+        "api_key": access_token,
+        "is_enabled": True,
+        "provider": "openai",
+    }
+    if refresh_token:
+        ep["refresh_token"] = refresh_token
+    models: list[dict] = []
+    try:
+        _, models, _s, _e = await asyncio.to_thread(_probe_endpoint_models, ep)
+    except Exception:
+        models = []
+    ep["models"] = [m["id"] for m in models]
+    _store_model_endpoint(ep)
+    return {"status": "authorized", "endpoint": {"name": ep["name"], "base_url": ep["base_url"], "models": ep["models"]}}
 
 # ── Email accounts CRUD ──
 
@@ -4202,7 +4982,30 @@ async def session_inject_message(sid: str, request: Request):
 
 @app.post("/api/skills/{name}/invoke")
 async def skills_invoke(name: str, request: Request):
-    return {"ok": True, "result": f"Skill {name} invoked"}
+    skills = _load_json(DATA_DIR / "skills.json", [])
+    sk = next((s for s in skills if s.get("name") == name), None)
+    try:
+        body = await request.json() or {}
+    except Exception:
+        body = {}
+    request_text = str(body.get("request") or "").strip()
+    if not sk:
+        return JSONResponse({"detail": f"Skill '{name}' not found"}, status_code=404)
+    sk["uses"] = int(sk.get("uses") or 0) + 1
+    sk["updated_at"] = _now()
+    _save_json(DATA_DIR / "skills.json", skills)
+    md_file = SKILLS_DIR / f"{name}.md"
+    content = md_file.read_text(encoding="utf-8") if md_file.exists() else ""
+    lines = [f"Use the skill '/{name}'. Follow it exactly for this task."]
+    if content.strip():
+        lines.append("")
+        lines.append(f"<skill:{name}>")
+        lines.append(content.strip())
+        lines.append(f"</skill:{name}>")
+    lines.append("")
+    lines.append(f"Task: {request_text}" if request_text else "Apply the skill now.")
+    message = "\n".join(lines)
+    return {"ok": True, "message": message, "result": f"Skill {name} invoked"}
 
 # ── Calendar config accounts CRUD ──
 

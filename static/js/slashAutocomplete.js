@@ -192,6 +192,33 @@ export function initSlashAutocomplete(textarea) {
   if (!textarea || textarea._slashAcWired) return;
   textarea._slashAcWired = true;
 
+  // Reload skill entries every SKILL_TTL ms so newly imported/published
+  // skills show up without a full page reload. Previously skills were merged
+  // only once at init, so a skill added after the composer was wired never
+  // appeared in the autocomplete. A failed (e.g. 401) fetch is ignored and the
+  // merge is retried on the next refresh.
+  let skillLoadedAt = 0;
+  const SKILL_TTL = 15000;
+  async function _refreshSkills() {
+    if ((Date.now() - skillLoadedAt) < SKILL_TTL) return;
+    try {
+      const skillEntries = await _loadSkillEntries();
+      if (skillEntries.length) {
+        const seen = new Set(all.map(e => e.token));
+        const merged = all.slice();
+        for (const entry of skillEntries) {
+          if (seen.has(entry.token)) continue;
+          seen.add(entry.token);
+          merged.push(entry);
+        }
+        all = merged;
+      }
+      skillLoadedAt = Date.now();
+    } catch (_) {
+      skillLoadedAt = Date.now();
+    }
+  }
+
   let all = _flatten();
   let popup = null;
   let visible = false;
@@ -211,7 +238,8 @@ export function initSlashAutocomplete(textarea) {
     _position(popup, textarea);
   };
 
-  const refresh = () => {
+  const refresh = async () => {
+    await _refreshSkills();
     const v = textarea.value;
     // Only trigger when the message starts with "/" (no leading space) and
     // contains at most one space after the command (so subcommands work).
@@ -239,19 +267,6 @@ export function initSlashAutocomplete(textarea) {
     show();
     _render(popup, items, selectedIdx, query);
   };
-
-  _loadSkillEntries().then(skillEntries => {
-    if (!skillEntries.length) return;
-    const seen = new Set(all.map(e => e.token));
-    const merged = all.slice();
-    for (const entry of skillEntries) {
-      if (seen.has(entry.token)) continue;
-      seen.add(entry.token);
-      merged.push(entry);
-    }
-    all = merged;
-    if (visible) refresh();
-  });
 
   const insert = (token) => {
     textarea.value = token + ' ';

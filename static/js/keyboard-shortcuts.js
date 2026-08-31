@@ -6,7 +6,7 @@ import { IS_MAC, isAltGrEvent } from './platform.js';
 import { getSettings } from './appConfig.js';
 
 const _defaultKeybinds = {
-  search: 'ctrl+k', toggle_sidebar: 'ctrl+alt+b', new_session: 'ctrl+alt+n',
+  search: 'ctrl+k', toggle_sidebar: 'ctrl+b', new_session: 'ctrl+alt+n',
   fav_session: 'ctrl+alt+f', delete_session: 'ctrl+alt+d',
   cancel: 'escape', tts: 'alt+shift+t',
   incognito: 'ctrl+alt+i', settings: 'ctrl+,', focus_input: 'ctrl+/',
@@ -152,6 +152,17 @@ export function initKeyboardShortcuts(modules) {
       return;
     }
     if (_matchesCombo(e, kb.toggle_sidebar)) {
+      // Don't hijack Ctrl+B used for bold / text editing inside inputs,
+      // textareas and contenteditable editors (document/Markdown/notes).
+      // The main chat composer (#message) is exempt so the advertised
+      // "Press Ctrl+B to toggle the sidebar" tip still works there.
+      var _ae = document.activeElement;
+      if (_ae && _ae !== document.body && _ae.tagName !== 'BODY'
+          && _ae.id !== 'message'
+          && (_ae.tagName === 'INPUT' || _ae.tagName === 'TEXTAREA'
+              || _ae.isContentEditable)) {
+        return;
+      }
       e.preventDefault();
       var sb = document.getElementById('sidebar');
       var ir = document.getElementById('icon-rail');
@@ -161,7 +172,7 @@ export function initKeyboardShortcuts(modules) {
         if (ir) ir.classList.remove('rail-hidden');
         if (sb) sb.classList.remove('hidden');
       }
-      if (typeof syncRailSide === 'function') syncRailSide();
+      if (typeof window.syncRailSide === 'function') window.syncRailSide();
       return;
     }
     if (_matchesCombo(e, kb.tts)) {

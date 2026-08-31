@@ -1,0 +1,33 @@
+SAB
+Copyright (c) 2026 Syed Abdullah Yaqoob
+
+SAB is distributed under the MIT License. See the LICENSE file for the full
+license text.
+
+Third-Party Software
+--------------------
+
+SAB is built on and bundles open-source software. The following libraries are
+used in this project; each remains under its own license:
+
+Python dependencies (runtime and build):
+- Typer (MIT) — CLI framework
+- LiteLLM (MIT) — multi-provider LLM support
+- Rich (MIT) — terminal formatting
+- pydantic (MIT) — data validation
+- python-dotenv (BSD-3-Clause) — environment configuration
+- FastAPI (MIT) — web framework
+- uvicorn (BSD-3-Clause) — ASGI server
+- websockets (BSD-3-Clause) — WebSocket support
+- hatchling (MIT) — build backend
+
+Web / front-end assets (bundled under /static/lib):
+- highlight.js (BSD-3-Clause) — syntax highlighting
+- KaTeX (MIT) — math rendering
+- Mermaid (MIT) — diagram rendering
+- Additional vendored libraries (xlsx, qrcode, mammoth, html2pdf, docx)
+  remain under their respective licenses.
+
+A complete dependency manifest with version pinning is maintained in
+pyproject.toml. Please refer to each project's own license terms for the
+precise obligations of that component.
