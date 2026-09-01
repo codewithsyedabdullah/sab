@@ -2892,14 +2892,14 @@ body.bg-pattern-sparkles {
       0%   { transform: translateY(10px) scale(0.3); opacity: 0; }
       100% { transform: translateY(0) scale(1); opacity: 1; }
     }
-    /* Stop button — Processing: Siren pulse, Receiving: Quarter turn spin */
+    /* Stop button — Processing: Heartbeat pulse, Receiving: Quarter turn spin */
     .send-btn[data-mode="streaming"][data-phase="processing"] svg {
-      animation: siren-icon 1.5s ease-in-out infinite;
+      animation: stop-pulse 1.5s ease-in-out infinite;
     }
     .send-btn[data-mode="streaming"][data-phase="receiving"] svg {
       animation: quarter-turn 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
-    @keyframes siren-icon {
+    @keyframes stop-pulse {
       0%, 100% { transform: scale(1); }
       50%      { transform: scale(0.8); }
     }
@@ -41416,3 +41416,9 @@ body.settings-sidebar-resize-active {
     display: none;
   }
 }
+
+
+/* --- Kept local fixes --- */
+#settings-modal { align-items: flex-start; zoom: 1.15; }
+.sidebar-brand-title { display: none; }
+#settings-modal .settings-modal-content { margin-top: 7vh; }

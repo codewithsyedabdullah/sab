@@ -15,42 +15,6 @@
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <script nonce="{{CSP_NONCE}}">
-  /* SAB rebrand migration: copy any legacy `sabsabsa*` localStorage / sessionStorage keys to their `sab*` counterparts before the app reads them. Safe no-op when nothing is stored. */
-  (function () {
-    function migrate(store) {
-      try {
-        var keysToCopy = [];
-        for (var i = 0; i < store.length; i++) {
-          var k = store.key(i);
-          if (!k) continue;
-          var nk = null;
-          if (k.indexOf('email-sabsabsa-') === 0) {
-            nk = 'email-sab-' + k.slice('email-sabsabsa-'.length);
-          } else if (k.indexOf('sabsabsa') === 0) {
-            nk = 'sab' + k.slice('sabsabsa'.length);
-          }
-          if (!nk || nk === k) continue;
-          keysToCopy.push([k, nk]);
-        }
-        keysToCopy.forEach(function (pair) {
-          var oldKey = pair[0], newKey = pair[1];
-          try {
-            var val = store.getItem(oldKey);
-            if (val !== null && store.getItem(newKey) === null) {
-              store.setItem(newKey, val);
-            }
-          } catch (e) {}
-        });
-        keysToCopy.forEach(function (pair) {
-          try { store.removeItem(pair[0]); } catch (e) {}
-        });
-      } catch (e) {}
-    }
-    migrate(window.localStorage);
-    migrate(window.sessionStorage);
-  })();
-  </script>
-  <script nonce="{{CSP_NONCE}}">
   window._sabLoadTime = Date.now();
   (function(){
     try {

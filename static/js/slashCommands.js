@@ -5265,18 +5265,9 @@ async function _cmdShortcuts(args, ctx) {
 
 // ── Easter eggs ──
 
-const _ODYSSEY_QUOTES = [
-  "Tell me, O Muse, of that ingenious hero who travelled far and wide...",
-  "Of all creatures that breathe and move upon the earth, nothing is bred that is weaker than man.",
-  "There is a time for many words, and there is also a time for sleep.",
-  "Even his griefs are a joy long after to one that remembers all that he wrought and endured.",
-  "Be strong, saith my heart; I am a soldier; I have seen worse sights than this.",
-  "There is nothing more admirable than when two people who see eye to eye keep house as man and wife.",
-  "A man who has been through bitter experiences and travelled far enjoys even his sufferings after a time.",
-  "For a friend with an understanding heart is worth no less than a brother.",
-  "The wine urges me on, the bewitching wine, which sets even a wise man to singing and to laughing gently.",
-  "I am SAB, son of Laertes, known to all for my cunning. My fame reaches even unto heaven.",
-];
+
+
+
 
 const _8BALL = [
   "It is certain.", "It is decidedly so.", "Without a doubt.", "Yes, definitely.",
@@ -5402,16 +5393,6 @@ async function _cmdFortune(args, ctx) {
     <div style="font-size:0.7em;text-transform:uppercase;letter-spacing:2px;opacity:0.35;margin-bottom:8px">Fortune Cookie</div>
     <div style="font-style:italic;line-height:1.5">${f}</div>
     <div style="margin-top:8px;font-size:0.75em;opacity:0.3">${String(Math.floor(Math.random()*90)+10)} ${String(Math.floor(Math.random()*90)+10)} ${String(Math.floor(Math.random()*90)+10)} ${String(Math.floor(Math.random()*90)+10)} ${String(Math.floor(Math.random()*90)+10)} ${String(Math.floor(Math.random()*90)+10)}</div>
-  </div>`);
-  if (!document.getElementById('egg-styles')) { const s=document.createElement('style');s.id='egg-styles';s.textContent='@keyframes egg-spin{0%{transform:rotateY(0) scale(0.5);opacity:0}50%{transform:rotateY(540deg) scale(1.2)}100%{transform:rotateY(720deg) scale(1)}} @keyframes egg-shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}} @keyframes egg-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}';document.head.appendChild(s); }
-  return true;
-}
-
-async function _cmdOdyssey(args, ctx) {
-  const q = _ODYSSEY_QUOTES[Math.floor(Math.random() * _ODYSSEY_QUOTES.length)];
-  _eggRender(`<div style="max-width:420px;border-left:3px solid var(--red);padding:8px 16px;animation:egg-fade 0.5s ease-out">
-    <div style="font-style:italic;line-height:1.6;opacity:0.9">${q}</div>
-    <div style="margin-top:8px;font-size:0.8em;opacity:0.4">Homer, The Odyssey</div>
   </div>`);
   if (!document.getElementById('egg-styles')) { const s=document.createElement('style');s.id='egg-styles';s.textContent='@keyframes egg-spin{0%{transform:rotateY(0) scale(0.5);opacity:0}50%{transform:rotateY(540deg) scale(1.2)}100%{transform:rotateY(720deg) scale(1)}} @keyframes egg-shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}} @keyframes egg-fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}';document.head.appendChild(s); }
   return true;
@@ -6147,7 +6128,6 @@ const COMMANDS = {
   roll:    { alias: ['dice', 'r'],  hidden: true, handler: _cmdRoll,    usage: '/roll [NdN|sides]' },
   '8ball': { alias: ['8-ball'],     hidden: true, handler: _cmd8Ball,   usage: '/8ball question' },
   fortune: { alias: ['cookie'],     hidden: true, handler: _cmdFortune, usage: '/fortune' },
-  odyssey: { alias: ['homer','quote'],hidden: true, handler: _cmdOdyssey,usage: '/odyssey' },
   ascii:   { alias: ['banner'],     hidden: true, handler: _cmdAscii,   usage: '/ascii [text]' },
   matrix:  { alias: [],             hidden: true, handler: _cmdMatrix,  usage: '/matrix' },
   cowsay:  { alias: ['moo', 'say'], hidden: true, handler: _cmdSay,     usage: '/cowsay [text]' },

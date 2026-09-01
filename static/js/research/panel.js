@@ -10,7 +10,7 @@ import { sortModelIds } from '../modelSort.js';
 // Rotating research textarea placeholders — pick one at random each
 // time the panel is rendered so the example keeps feeling fresh.
 const _RESEARCH_HINTS = [
-  "e.g. Trace SAB's ten-year journey home from Troy — every island, monster, and detour, and why each one cost him",
+  "e.g. Trace how a product idea becomes a shipped MVP — every decision, deadline, and detour, and why each one mattered",
   "e.g. Compare Rust and Go for building a high-throughput web API in 2026",
   "e.g. Fact-check whether honey actually never spoils",
   "e.g. How to roast a duck so the skin stays crispy",

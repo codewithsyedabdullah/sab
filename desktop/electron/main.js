@@ -129,6 +129,9 @@ function stopServer() {
 }
 
 function createWindow() {
+  // Remove any application menu so Alt never reveals File/Edit/View/etc.
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -153,11 +156,21 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Restore F11 fullscreen toggle (removing the menu killed the built-in accelerator).
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      event.preventDefault();
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     // Server not up yet — retry shortly.
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL(START_URL);
+mainWindow.setMenu(null);
+
+  mainWindow.loadURL(START_URL);
       }
     }, 1200);
   });

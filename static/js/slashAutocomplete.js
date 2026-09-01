@@ -12,7 +12,7 @@ const MAX_VISIBLE = 14;
 // own row when relevant — /toggle web, /chats new, etc).
 // Commands intentionally excluded from the autocomplete popup (pure easter
 // eggs with no productivity value, or internal machinery).
-const EXCLUDED = new Set(['flip','roll','8ball','fortune','odyssey','ascii']);
+const EXCLUDED = new Set(['flip','roll','8ball','fortune','ascii']);
 
 // Important legacy aliases to promote to their own rows in the popup. These
 // are the short forms people will actually type (/new, /clear, /web, etc.)
