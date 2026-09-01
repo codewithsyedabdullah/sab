@@ -52,7 +52,7 @@ const FONT_MAP = {
   opendyslexic: "'OpenDyslexic', sans-serif",
   jetbrains: "'JetBrains Mono', 'Fira Code', monospace",
 };
-const DEFAULT_FONT = 'mono';
+const DEFAULT_FONT = 'anton';
 const DEFAULT_DENSITY = 'comfortable';
 const MAX_CUSTOM_THEMES = 8;
 

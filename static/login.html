@@ -173,7 +173,7 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: var(--font-family, 'Fira Code', monospace);
+    font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
     background: var(--bg); color: var(--fg);
     display: flex; justify-content: center; align-items: flex-start;
     min-height: 100vh; min-height: 100dvh;
@@ -192,7 +192,7 @@
     text-align: center; margin-bottom: 1.5rem;
   }
   .logo span {
-    font-family: var(--font-family, 'Fira Code', monospace);
+    font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
     font-size: 2rem; font-weight: 600;
     letter-spacing: 0.04em;
     /* Same gradient as the main app's welcome-screen "SAB" title
@@ -208,7 +208,7 @@
   input:not(.remember-check) {
     width: 100%; padding: 0.6rem 0.8rem; margin-bottom: 1rem;
     background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-    color: var(--fg); font-size: 0.95rem; font-family: var(--font-family, 'Fira Code', monospace);
+    color: var(--fg); font-size: 0.95rem; font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
   }
   input:focus { outline: none; border-color: var(--red); }
   /* On touch devices keep inputs at >=16px so iOS Safari doesn't zoom the whole
@@ -233,7 +233,7 @@
     /* Darken the brand red slightly so #fff label text clears the WCAG AA
        4.5:1 contrast threshold (plain --red #e06c75 only reaches ~3.2:1). */
     background: color-mix(in srgb, var(--red) 78%, #000); color: #fff; font-size: 1rem; cursor: pointer;
-    font-weight: 600; font-family: var(--font-family, 'Fira Code', monospace);
+    font-weight: 600; font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
   }
   button:hover { background: color-mix(in srgb, var(--red) 66%, black); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -290,7 +290,7 @@
   .version-label {
     position: fixed; bottom: 12px; right: 16px;
     font-size: 0.7rem; opacity: 0.25;
-    font-family: var(--font-family, 'Fira Code', monospace);
+    font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
     pointer-events: none; user-select: none;
   }
   /* Whirlpool-style spinner shown in the submit button while login /

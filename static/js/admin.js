@@ -619,7 +619,7 @@ async function loadEndpoints() {
           if (deps.length) {
             msg += '\n\nThe following settings use this endpoint and will be reset:\n— ' + deps.join('\n— ');
           }
-          if (!await uiModule.styledConfirm(msg, { confirmText: 'Delete', danger: true })) return;
+          if (!await uiModule.styledConfirm(msg, { confirmText: 'Clear', danger: true })) return;
         }
         // Optimistic: remove from UI immediately
         const row = btn.closest('[data-adm-ep-id]');
@@ -2114,7 +2114,7 @@ async function loadMcpServers() {
     });
     list.querySelectorAll('[data-adm-mcp-delete]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!await uiModule.styledConfirm('Delete this MCP server?', { confirmText: 'Delete', danger: true })) return;
+        if (!await uiModule.styledConfirm('Delete this MCP server?', { confirmText: 'Clear', danger: true })) return;
         await fetch(`/api/mcp/servers/${btn.dataset.admMcpDelete}`, { method: 'DELETE', credentials: 'same-origin' });
         loadMcpServers();
       });
@@ -2437,7 +2437,7 @@ async function loadRag() {
       }).join('');
       fileList.querySelectorAll('[data-adm-rag-file]').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!await uiModule.styledConfirm(`Delete "${btn.dataset.admRagFile}" from RAG?`, { confirmText: 'Delete', danger: true })) return;
+          if (!await uiModule.styledConfirm(`Delete "${btn.dataset.admRagFile}" from RAG?`, { confirmText: 'Clear', danger: true })) return;
           btn.disabled = true; btn.textContent = '...';
           try {
             const res = await fetch('/api/personal/file?filepath=' + encodeURIComponent(btn.dataset.admRagFile), { method: 'DELETE' });
@@ -2725,7 +2725,7 @@ async function loadWebhooks() {
     });
     list.querySelectorAll('[data-adm-wh-delete]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!await uiModule.styledConfirm('Delete this webhook?', { confirmText: 'Delete', danger: true })) return;
+        if (!await uiModule.styledConfirm('Delete this webhook?', { confirmText: 'Clear', danger: true })) return;
         await fetch(`/api/webhooks/${btn.dataset.admWhDelete}`, { method: 'DELETE', credentials: 'same-origin' }); loadWebhooks();
       });
     });
@@ -2904,11 +2904,11 @@ function initDangerZone() {
       const kind = btn.dataset.wipeKind;
       const isAll = kind === '__all__';
       const label = isAll ? 'data across every category' : (_LABELS[kind] || kind);
-      if (!await uiModule.styledConfirm(`Delete ALL ${label}? This cannot be undone.`, { confirmText: 'Delete', danger: true })) return;
-      if (!await uiModule.styledConfirm(`Really delete every one of your ${label}?`, { confirmText: isAll ? 'Yes, delete everything' : 'Yes, delete everything', danger: true })) return;
+      if (!await uiModule.styledConfirm(`Clear ALL ${label}? This cannot be undone.`, { confirmText: 'Clear', danger: true })) return;
+      if (!await uiModule.styledConfirm(`Really clear every one of your ${label}?`, { confirmText: isAll ? 'Yes, clear everything' : 'Yes, clear everything', danger: true })) return;
       btn.disabled = true;
       const prevHtml = btn.innerHTML;
-      btn.innerHTML = isAll ? 'Deleting all…' : 'Deleting…';
+      btn.innerHTML = isAll ? 'Clearing all…' : 'Clearing…';
       if (_wipeMsg) { _wipeMsg.textContent = ''; _wipeMsg.className = ''; }
       try {
         if (isAll) {

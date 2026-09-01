@@ -636,7 +636,7 @@
             <label class="theme-fd-label">Accent Color</label>
             <div class="color-row" style="justify-content:flex-start;gap:8px;">
               <input type="color" id="harmony-accent" value="#e06c75">
-              <span id="harmony-accent-hex" style="font-size:11px;opacity:0.65;font-family:ui-monospace,monospace;letter-spacing:0.02em;">#e06c75</span>
+              <span id="harmony-accent-hex" style="font-size:11px;opacity:0.65;font-family:var(--mono, ui-monospace, monospace);letter-spacing:0.02em;">#e06c75</span>
             </div>
           </div>
           <div class="theme-fd-group">
@@ -1501,11 +1501,11 @@
           <!-- Section 1: AI plumbing (Add Models → AI Defaults → Search) -->
           <button class="settings-nav-item active" data-settings-tab="services">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-            <span>Add Models</span>
+            <span>Models</span>
           </button>
           <button class="settings-nav-item" data-settings-tab="added-models">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>Added Models</span>
+            <span>Installed Models</span>
           </button>
           <button class="settings-nav-item" data-settings-tab="ai">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/></svg>
@@ -1551,7 +1551,7 @@
           <div class="settings-sidebar-label admin-only">Admin</div>
           <button class="settings-nav-item admin-only" data-settings-tab="tools">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-            <span>Agent Tools</span>
+            <span>Tools</span>
           </button>
           <button class="settings-nav-item admin-only" data-settings-tab="users">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2500,75 +2500,75 @@
 
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <div class="admin-toggle-label">Delete all chats</div>
+                <div class="admin-toggle-label">Clear all chats</div>
                 <div class="admin-toggle-sub">Every session, message, and chat history. Documents/notes/etc. stay.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="chats" title="Delete all chats" aria-label="Delete all chats" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="chats" title="Clear all chats" aria-label="Clear all chats" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all memory</div>
+                <div class="admin-toggle-label">Clear all memory</div>
                 <div class="admin-toggle-sub">Clears `memory.json`, the Memory table, and the vector store. Skills not affected.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="memory" title="Delete all memory" aria-label="Delete all memory" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="memory" title="Clear all memory" aria-label="Clear all memory" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all skills</div>
+                <div class="admin-toggle-label">Clear all skills</div>
                 <div class="admin-toggle-sub">Drops `data/skills/` (all SKILL.md files). Memory not affected.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="skills" title="Delete all skills" aria-label="Delete all skills" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="skills" title="Clear all skills" aria-label="Clear all skills" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all notes</div>
+                <div class="admin-toggle-label">Clear all notes</div>
                 <div class="admin-toggle-sub">Every note, todo, and checklist.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="notes" title="Delete all notes" aria-label="Delete all notes" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="notes" title="Clear all notes" aria-label="Clear all notes" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all tasks</div>
+                <div class="admin-toggle-label">Clear all tasks</div>
                 <div class="admin-toggle-sub">Every scheduled task and its run history (Tasks tool).</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="tasks" title="Delete all tasks" aria-label="Delete all tasks" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="tasks" title="Clear all tasks" aria-label="Clear all tasks" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all documents</div>
+                <div class="admin-toggle-label">Clear all documents</div>
                 <div class="admin-toggle-sub">Every document and version. Drafts, exports, library — all gone.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="documents" title="Delete all documents" aria-label="Delete all documents" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="documents" title="Clear all documents" aria-label="Clear all documents" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all gallery</div>
+                <div class="admin-toggle-label">Clear all gallery</div>
                 <div class="admin-toggle-sub">Every image record and the upload directory on disk.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="gallery" title="Delete all gallery" aria-label="Delete all gallery" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="gallery" title="Clear all gallery" aria-label="Clear all gallery" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
               <div>
-                <div class="admin-toggle-label">Delete all calendar</div>
+                <div class="admin-toggle-label">Clear all calendar</div>
                 <div class="admin-toggle-sub">Every event and every calendar (incl. CalDAV-synced ones; resync to restore).</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="calendar" title="Delete all calendar" aria-label="Delete all calendar" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete</button>
+              <button class="admin-btn-delete" data-wipe-kind="calendar" title="Clear all calendar" aria-label="Clear all calendar" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear</button>
             </div>
 
             <hr style="border:0;border-top:1px solid color-mix(in srgb, #e55 25%, var(--border));margin:14px 0 10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <div>
-                <div class="admin-toggle-label" style="color:#e55;">Delete everything</div>
+                <div class="admin-toggle-label" style="color:#e55;">Clear all data</div>
                 <div class="admin-toggle-sub">All eight categories above, in one go. Same effect as wiping each one in sequence.</div>
               </div>
-              <button class="admin-btn-delete" data-wipe-kind="__all__" title="Delete every category" aria-label="Delete everything" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-weight:600;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete All</button>
+              <button class="admin-btn-delete" data-wipe-kind="__all__" title="Clear all data" aria-label="Clear all data" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-weight:600;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Clear All</button>
             </div>
             <div id="adm-wipeMsg" style="margin-top:8px;"></div>
           </div>
