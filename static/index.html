@@ -113,7 +113,7 @@
       }
       // Apply font early
       if (t && t.font) {
-        var fm = {mono:"'Fira Code', monospace",sans:"system-ui, -apple-system, 'Segoe UI', sans-serif",serif:"Georgia, 'Times New Roman', serif",opendyslexic:"'OpenDyslexic', sans-serif"};
+        var fm = {mono:"'JetBrains Mono','Fira Code',monospace",anton:"'Anton','Arial Narrow',sans-serif",sans:"system-ui, -apple-system, 'Segoe UI', sans-serif",serif:"Georgia, 'Times New Roman', serif",opendyslexic:"'OpenDyslexic', sans-serif",jetbrains:"'JetBrains Mono','Fira Code',monospace"};
         if (fm[t.font]) { s.setProperty('--font-family', fm[t.font]); }
         else { s.setProperty('--font-family', "'" + t.font.replace(/'/g,'') + "', sans-serif"); }
       }
@@ -250,6 +250,8 @@
     @font-face { font-family: 'Inter'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/Inter-Regular.woff2') format('woff2'); }
     @font-face { font-family: 'Inter'; font-weight: 500; font-style: normal; font-display: swap; src: url('/static/fonts/Inter-Medium.woff2') format('woff2'); }
     @font-face { font-family: 'Inter'; font-weight: 600; font-style: normal; font-display: swap; src: url('/static/fonts/Inter-SemiBold.woff2') format('woff2'); }
+    @font-face { font-family: 'Anton'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/Anton-Regular.woff2') format('woff2'); }
+    @font-face { font-family: 'JetBrains Mono'; font-weight: 100 800; font-style: normal; font-display: swap; src: url('/static/fonts/JetBrainsMono-Variable.woff2') format('woff2'); }
     @media (max-width: 768px) {
       html.ody-sidebar-off .sidebar,
       html.ody-mobile-startup-sidebar-hidden .sidebar {
@@ -668,9 +670,11 @@
             <label class="theme-fd-label">Font</label>
             <select id="theme-font-select" class="theme-fd-select" aria-label="Font">
               <option value="mono">Monospace</option>
+              <option value="anton">Anton</option>
               <option value="sans">Sans-serif</option>
               <option value="serif">Serif</option>
               <option value="opendyslexic">OpenDyslexic (dyslexia-friendly)</option>
+              <option value="jetbrains">JetBrains Mono</option>
             </select>
           </div>
           <div class="theme-fd-group">

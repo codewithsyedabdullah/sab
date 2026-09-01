@@ -29,17 +29,28 @@ export const THEMES = {
                             inputBg: '#2f2f2f', brandColor: '#ffffff', brandMixTo: '#ffffff' } },
   claude:     { bg:'#262624', fg:'#f5f4f0', panel:'#30302e', border:'#4a4a47', red:'#c6613f' },
   cute:       { bg:'#fff0f5', fg:'#d4608a', panel:'#fff8fa', border:'#f0c0d0', red:'#ff6b9d' },
+  // "gpt5" — clean light chat UI in the style of a GPT-5 chat client:
+  // near-white surfaces, subtle gray borders, white input/cards, royal-blue
+  // accent for the send button, toggles, and links.
+  gpt5:       { bg:'#f9f9f9', fg:'#0a0a0a', panel:'#ffffff', border:'#e9e9e9', red:'#3199ff',
+                advanced: { sendBtnBg: '#3199ff', sendBtnHover: '#1364e5',
+                            userBubbleBg: '#f4f4f4', aiBubbleBg: '#ffffff', bubbleBorder: '#d6d6d6',
+                            sidebarBg: '#ffffff', brandColor: '#3199ff', brandMixTo: '#0a0a0a',
+                            hamburgerColor: '#0a0a0a', inputBg: '#ffffff', inputBorder: '#d6d6d6',
+                            codeBg: '#efefef', codeFg: '#0a0a0a', toggleActive: '#3199ff' } },
 };
 
-const DEFAULT_THEME = 'dark';
+const DEFAULT_THEME = 'gpt5';
 const LS_KEY = 'sab-theme';
 const CUSTOM_THEMES_KEY = 'sab-custom-themes';
 
 const FONT_MAP = {
-  mono: "'Fira Code', monospace",
+  mono: "'JetBrains Mono', 'Fira Code', monospace",
+  anton: "'Anton', 'Arial Narrow', sans-serif",
   sans: "system-ui, -apple-system, 'Segoe UI', sans-serif",
   serif: "Georgia, 'Times New Roman', serif",
   opendyslexic: "'OpenDyslexic', sans-serif",
+  jetbrains: "'JetBrains Mono', 'Fira Code', monospace",
 };
 const DEFAULT_FONT = 'mono';
 const DEFAULT_DENSITY = 'comfortable';
@@ -59,6 +70,12 @@ const THEME_DEFAULT_PATTERN = {
   organs:     'rain',
   ume:        'petals',
   cute:       'sparkles',
+  gpt5:       'none',
+};
+
+// Default font for built-in themes (overrides the global DEFAULT_FONT).
+const THEME_DEFAULT_FONT = {
+  gpt5:       'anton',
 };
 
 // Default effect colors for specific themes (overrides --fg)
@@ -384,6 +401,7 @@ export function applyFontDensity(font, density) {
   }
   if (!family) family = FONT_MAP[DEFAULT_FONT];
   document.documentElement.style.setProperty('--font-family', family);
+  document.documentElement.style.setProperty('--mono', FONT_MAP.mono);
   document.documentElement.classList.remove('density-compact', 'density-spacious');
   if (d !== 'comfortable') document.documentElement.classList.add('density-' + d);
 }
@@ -709,7 +727,7 @@ export function initThemeUI() {
         sw.classList.add('active');
         syncPickers(colors);
         const ct = sw.dataset.custom ? customThemes[name] : null;
-        const f = ct && ct.font ? ct.font : DEFAULT_FONT;
+        const f = ct && ct.font ? ct.font : (THEME_DEFAULT_FONT[name] || DEFAULT_FONT);
         const d = ct && ct.density ? ct.density : DEFAULT_DENSITY;
         const p = ct && ct.bgPattern ? ct.bgPattern : (THEME_DEFAULT_PATTERN[name] || 'none');
         const ec = ct && ct.bgEffectColor ? ct.bgEffectColor : (THEME_DEFAULT_EFFECT_COLOR[name] || '');
@@ -1092,7 +1110,7 @@ export function initThemeUI() {
   syncResetButtons();
 
   // Font, density, background pattern controls
-  const _initFont = (saved && saved.font) || DEFAULT_FONT;
+  const _initFont = (saved && saved.font) || (saved && THEME_DEFAULT_FONT[saved.name]) || DEFAULT_FONT;
   const _initDensity = (saved && saved.density) || DEFAULT_DENSITY;
   const _initPattern = (saved && saved.bgPattern) || (saved && THEME_DEFAULT_PATTERN[saved.name]) || 'none';
   const _initEffectColor = (saved && saved.bgEffectColor) || (saved && THEME_DEFAULT_EFFECT_COLOR[saved.name]) || '';

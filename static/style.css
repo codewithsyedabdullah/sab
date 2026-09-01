@@ -102,7 +102,7 @@ body {
      below so left + right docks can coexist without skewing the whole body. */
   transition: padding-left 160ms cubic-bezier(0.22, 0.61, 0.36, 1),
               padding-right 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  font-family: var(--font-family, 'Fira Code', monospace);
+  font-family: var(--font-family, 'Anton', 'Arial Narrow', sans-serif);
   display: flex;
   height: 100%;
   height: 100dvh; /* dynamic viewport height — adapts when mobile keyboard opens */
@@ -113,6 +113,11 @@ body {
 @font-face { font-family: 'Fira Code'; font-weight: 300; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-Light.woff2') format('woff2'); }
 @font-face { font-family: 'Fira Code'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-Regular.woff2') format('woff2'); }
 @font-face { font-family: 'Fira Code'; font-weight: 600; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-SemiBold.woff2') format('woff2'); }
+
+/* Self-hosted Anton — display/UI font option */
+@font-face { font-family: 'Anton'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/Anton-Regular.woff2') format('woff2'); }
+/* Self-hosted JetBrains Mono — variable mono font option */
+@font-face { font-family: 'JetBrains Mono'; font-weight: 100 800; font-style: normal; font-display: swap; src: url('/static/fonts/JetBrainsMono-Variable.woff2') format('woff2'); }
 
 /* Self-hosted OpenDyslexic — dyslexia-friendly accessibility font option (SIL OFL 1.1) */
 @font-face { font-family: 'OpenDyslexic'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/OpenDyslexic-Regular.woff2') format('woff2'); }
@@ -8341,6 +8346,11 @@ pre { background: var(--code-bg, var(--hl-bg, #282c34)) !important; }
 @font-face { font-family: 'Fira Code'; font-weight: 300; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-Light.woff2') format('woff2'); }
 @font-face { font-family: 'Fira Code'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-Regular.woff2') format('woff2'); }
 @font-face { font-family: 'Fira Code'; font-weight: 600; font-style: normal; font-display: swap; src: url('/static/fonts/FiraCode-SemiBold.woff2') format('woff2'); }
+
+/* Self-hosted Anton — display/UI font option */
+@font-face { font-family: 'Anton'; font-weight: 400; font-style: normal; font-display: swap; src: url('/static/fonts/Anton-Regular.woff2') format('woff2'); }
+/* Self-hosted JetBrains Mono — variable mono font option */
+@font-face { font-family: 'JetBrains Mono'; font-weight: 100 800; font-style: normal; font-display: swap; src: url('/static/fonts/JetBrainsMono-Variable.woff2') format('woff2'); }
 
 /* Scrollbar styling */
 
