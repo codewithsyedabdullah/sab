@@ -85,6 +85,10 @@ for d in [DATA_DIR, HISTORIES_DIR, UPLOADS_DIR, SKILLS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 config = Config.from_env()
+config.agent.use_tools = True
+if not os.environ.get("SAB_WORKSPACE"):
+    os.environ["SAB_WORKSPACE"] = str(DATA_DIR.parent)
+    config.workspace = Path(DATA_DIR.parent)
 
 active_streams: dict[str, asyncio.Event] = {}
 running_agents: dict[str, Agent] = {}
@@ -1359,6 +1363,7 @@ async def chat_stream(request: Request):
     selected_model = str(params.get("selected_model", "")).strip()
     selected_endpoint_id = str(params.get("selected_endpoint_id", "")).strip()
     selected_endpoint_url = str(params.get("selected_endpoint_url", "")).strip()
+    workspace_param = str(params.get("workspace", "")).strip()
 
     attachment_ids: list[str] = []
     try:
@@ -1380,6 +1385,9 @@ async def chat_stream(request: Request):
         })
         _save_sessions(sessions)
 
+    _prior_history = _get_history(session_id)
+    if len(_prior_history) > 40:
+        _prior_history = _prior_history[-40:]
     _append_history(session_id, "user", message)
 
     stop_event = asyncio.Event()
@@ -1422,7 +1430,11 @@ async def chat_stream(request: Request):
         except Exception:
             chat_message = message
 
-    agent = Agent(config, endpoint=endpoint_override)
+    _agent_config = config
+    if workspace_param and os.path.isdir(workspace_param):
+        import dataclasses
+        _agent_config = dataclasses.replace(config, workspace=Path(workspace_param))
+    agent = Agent(_agent_config, endpoint=endpoint_override, history=_prior_history)
     running_agents[session_id] = agent
 
     async def generate():
@@ -1472,8 +1484,16 @@ async def chat_stream(request: Request):
         finally:
             active_streams.pop(session_id, None)
             running_agents.pop(session_id, None)
-            if full_response:
-                _append_history(session_id, "assistant", full_response)
+            if full_response or agent.messages:
+                # Persist the FULL conversation (user turn, assistant text,
+                # tool-call rounds + results) so the model remembers what it
+                # actually did — not just the final text. Replaces the prior
+                # history file wholesale to stay coherent.
+                try:
+                    _save_history(session_id, agent.dump_history())
+                except Exception:
+                    if full_response:
+                        _append_history(session_id, "assistant", full_response)
                 sessions = _load_sessions()
                 s = next((x for x in sessions if x["id"] == session_id), None)
                 if s:
@@ -2913,10 +2933,28 @@ async def model_cached():
 
 # ──────────────────── SHELL EXEC ────────────────────
 
+def _resolve_python_cmd(cmd: str) -> str:
+    """Shell commands are authored as `python3`/`python`/`py`/`pip`, but on this
+    machine those bare names resolve to the Microsoft Store app-execution alias,
+    which just prints "Python was not found" and exits. Rewrite the leading
+    interpreter/pip token to the interpreter that is actually running this server
+    (sys.executable), quoted so paths with spaces survive shell=True."""
+    m = re.match(r'^\s*(python3?|py|pip3?)\s+', cmd)
+    if not m:
+        return cmd
+    head = cmd[:m.start()]
+    token = m.group(1)
+    rest = cmd[m.end():]
+    exe = sys.executable
+    if token in ("pip", "pip3"):
+        return f'{head}"{exe}" -m pip {rest}'
+    return f'{head}"{exe}" {rest}'
+
+
 @app.post("/api/shell/exec")
 async def shell_exec(request: Request):
     body = await request.json()
-    cmd = body.get("command", "echo hello")
+    cmd = _resolve_python_cmd(body.get("command", "echo hello"))
     try:
         result = await asyncio.to_thread(lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=str(DATA_DIR.parent)))
         return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
@@ -4734,7 +4772,7 @@ async def session_restore(sid: str):
 @app.post("/api/shell/stream")
 async def shell_stream_post(request: Request):
     body = await request.json()
-    cmd = body.get("command", "echo hello")
+    cmd = _resolve_python_cmd(body.get("command", "echo hello"))
     async def generate():
         try:
             result = await asyncio.to_thread(lambda: subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=str(DATA_DIR.parent)))

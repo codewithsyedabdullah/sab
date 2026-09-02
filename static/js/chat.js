@@ -4399,7 +4399,7 @@ import { loadPanel } from './panels.js';
           }
 
           if (abortReason === 'recovery') {
-            const recoveryMsg = 'Streaming was interrupted after the tab went inactive. Partial output was preserved.';
+            const recoveryMsg = 'Connection stalled while this tab was in the background and the partial reply was cut off. The model kept working but the reply is incomplete — send "continue" or retry to finish.';
             if (holder && !accumulated) {
               holder.querySelector('.body').innerHTML =
                 `<div style="color: var(--color-error); font-style: italic; padding: 4px 0;">[${recoveryMsg}]</div>`;
@@ -5419,30 +5419,55 @@ import { loadPanel } from './panels.js';
       pre.dataset.btnPosComputed = '1';
     }, true);
 
-    // Tab suspension recovery: when user tabs back in, check if stream froze
+    // Tab suspension recovery: when the user tabs back in, a background stream
+    // should KEEP working, not be aborted. Browsers throttle timers and fetch
+    // readers while a tab is hidden, so `lastActivity` naturally goes stale
+    // during a hide — that is NOT a failure. So on visibility, we give the
+    // reader a generous window to flush the data that backed up while hidden,
+    // and only recover if it stays genuinely silent WITH THE TAB VISIBLE
+    // (which would indicate the connection actually died, not throttling).
+    let _recoveryTimer = null;
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') return;
       const active = _getForegroundStreamState();
       if (!active) return;
 
-      // Stream claims to be running — check if reader is actually alive
-      const staleSince = Date.now() - (active.lastActivity || _lastReaderActivity);
-      if (staleSince < 20000) return; // Active recently, probably fine
-
-      // Reader hasn't produced data in 5+ seconds after tab resume.
-      // Give it a short grace period then recover.
-      console.warn('[tab-recovery] Stream appears frozen (no activity for ' + Math.round(staleSince/1000) + 's). Recovering...');
-
-      setTimeout(() => {
-        // Re-check — maybe the reader woke up during the grace period
+      // The reader was potentially paused by throttling. After any hide, wait
+      // a long grace period (data may still be buffered client-side and will
+      // arrive over the next moments) before even considering recovery.
+      if (_recoveryTimer) clearTimeout(_recoveryTimer);
+      _recoveryTimer = setTimeout(() => {
+        _recoveryTimer = null;
+        // Re-check everything: the stream may have completed during the grace.
         const stillActive = _getForegroundStreamState();
         if (!stillActive) return;
-        const stillStale = Date.now() - (stillActive.lastActivity || _lastReaderActivity);
-        if (stillStale < 5000) return; // Came back to life
+        const unchanged = Date.now() - (stillActive.lastActivity || _lastReaderActivity);
+        // Only treat as dead if there has been NO activity for a long time
+        // while the tab has been continuously visible. Generous threshold so
+        // a slow model that legitimately pauses (e.g. a long tool call) is not
+        // mistaken for a frozen stream.
+        if (unchanged < 30000) return;
 
-        console.warn('[tab-recovery] Stream confirmed dead. Aborting and reloading session.');
+        // If the reader already observed a real provider/server error while the
+        // tab was hidden, do NOT override it with a misleading "tab inactive"
+        // label — let the catch path render the actual error message instead.
+        if (_streamTerminalError || stillActive.terminalError) {
+          console.warn('[tab-recovery] Stream had a real error; letting the actual error message surface.');
+          if (stillActive.abortCtrl) {
+            stillActive.abortCtrl._reason = stillActive.terminalError?.abortReason || 'stream-error';
+            stillActive.abortCtrl.abort();
+          }
+          try {
+            const sid = sessionModule && sessionModule.getCurrentSessionId && sessionModule.getCurrentSessionId();
+            if (sid) _activeStreams.delete(sid);
+          } catch (_) {}
+          _syncForegroundStreamGlobals();
+          if (_webLockRelease) { _webLockRelease(); _webLockRelease = null; }
+          return;
+        }
 
-        // Abort the frozen stream, but preserve the visible bubble.
+        console.warn('[tab-recovery] Stream silent for ' + Math.round(unchanged/1000) + 's while visible. Aborting and reloading session.');
+
         if (stillActive.abortCtrl) {
           stillActive.abortCtrl._reason = 'recovery';
           stillActive.abortCtrl.abort();
@@ -5453,18 +5478,16 @@ import { loadPanel } from './panels.js';
         } catch (_) {}
         _syncForegroundStreamGlobals();
 
-        // Release Web Lock
         if (_webLockRelease) {
           _webLockRelease();
           _webLockRelease = null;
         }
 
-        // Reset UI state
         var _submitBtn = document.getElementById('submit');
         updateSubmitButton('idle', _submitBtn);
         var _msgInput = document.getElementById('message');
         if (_msgInput) _msgInput.disabled = false;
-      }, 2000); // 2 second grace period
+      }, 15000); // Long grace: let buffered data drain after resuming.
     });
 
     // On mobile, fade out welcome text when keyboard opens to prevent overlap

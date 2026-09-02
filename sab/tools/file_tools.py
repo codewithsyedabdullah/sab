@@ -17,11 +17,22 @@ BLOCKED_PATTERNS = [
     r"etc/shadow",
     r"\.ssh/",
     r"\.env\b",
-    r"secret",
-    r"password",
-    r"token",
-    r"api[_-]?key",
 ]
+
+_active_workspace = None
+
+
+def _resolve_path(file_path: str) -> Path:
+    # Resolve relative paths against the configured workspace so that
+    # "write check/index.html" lands inside the workspace, not the process CWD.
+    p = Path(file_path)
+    if p.is_absolute():
+        return p
+    ws = _active_workspace
+    if ws is None:
+        ws = Config.from_env().workspace
+    return Path(ws) / p
+
 
 
 @dataclass
@@ -65,7 +76,7 @@ def _check_safety(command: str) -> str | None:
 
 def _read_file(file_path: str, offset: int = 1, limit: int = 2000) -> ToolResult:
     try:
-        p = Path(file_path)
+        p = _resolve_path(file_path)
         if not p.exists():
             return ToolResult(False, "", f"File not found: {file_path}")
         if p.stat().st_size > 1_000_000:
@@ -81,7 +92,7 @@ def _read_file(file_path: str, offset: int = 1, limit: int = 2000) -> ToolResult
 
 def _write_file(file_path: str, content: str) -> ToolResult:
     try:
-        p = Path(file_path)
+        p = _resolve_path(file_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         return ToolResult(True, f"Wrote {len(content)} bytes to {file_path}")
@@ -91,7 +102,7 @@ def _write_file(file_path: str, content: str) -> ToolResult:
 
 def _edit_file(file_path: str, old_string: str, new_string: str) -> ToolResult:
     try:
-        p = Path(file_path)
+        p = _resolve_path(file_path)
         if not p.exists():
             return ToolResult(False, "", f"File not found: {file_path}")
         content = p.read_text(encoding="utf-8")
@@ -119,7 +130,7 @@ def _run_shell(command: str, timeout: int = 30) -> ToolResult:
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(Config.from_env().workspace),
+            cwd=str(_active_workspace or Config.from_env().workspace),
             **({"encoding": "utf-8", "errors": "replace"} if not is_windows else {}),
         )
         output = result.stdout
@@ -158,9 +169,10 @@ def _grep(pattern: str, path: str = ".", include: str = "") -> ToolResult:
 
 def _glob(pattern: str, path: str = ".") -> ToolResult:
     try:
-        matches = sorted(Path(path).glob(pattern))
+        base = _resolve_path(path)
+        matches = sorted(base.glob(pattern))
         if not matches:
-            matches = sorted(Path(path).rglob(pattern))
+            matches = sorted(base.rglob(pattern))
         output = "\n".join(str(m) for m in matches[:200])
         return ToolResult(True, output or "No files found")
     except Exception as e:

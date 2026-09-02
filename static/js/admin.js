@@ -672,8 +672,11 @@ async function loadEndpoints() {
           panel.appendChild(_ld);
           const _stopSpin = () => { try { _modelsSpin && _modelsSpin.stop(); } catch (_) {} };
           const _loadingHtml = (label) => `<span style="opacity:0.55;font-size:11px;display:inline-flex;align-items:center;gap:8px;">${esc(label)}</span>`;
+          // /api/model-endpoints/{id}/models returns `{"models":[...]}`, not a
+          // bare array — unwrap it so sortModelObjects gets the list.
+          const _unwrapModelList = (r) => Array.isArray(r) ? r : (r && Array.isArray(r.models) ? r.models : (r && Array.isArray(r.data) ? r.data : []));
           const renderModels = (models, warning = '') => {
-            const sortedModels = sortModelObjects(models);
+            const sortedModels = sortModelObjects(_unwrapModelList(models));
             const usesPinnedPicker = sortedModels.some(m => !!m.picker_requires_pinning);
             panel.dataset.pickerMode = usesPinnedPicker ? 'pinned' : 'hidden';
             const warningHtml = warning ? `<div class="admin-error" style="font-size:11px;margin:6px 0;">${esc(warning)}</div>` : '';
@@ -715,13 +718,16 @@ async function loadEndpoints() {
                 <a href="#" data-ep-select-all="${epId}">All</a>
                 <a href="#" data-ep-select-none="${epId}">None</a>
               </span>
-            </div>${warningHtml}${showSearch ? `<input type="search" class="mcp-tools-search" placeholder="Search ${sortedModels.length} models..." data-ep-search="${epId}">` : ''}<div class="mcp-tools-list">` + sortedModels.map(m =>
-              `<label title="${esc(m.id)}" data-ep-model-row data-search="${esc((m.display + ' ' + m.id).toLowerCase())}" class="adm-model-row">
+            </div>${warningHtml}${showSearch ? `<input type="search" class="mcp-tools-search" placeholder="Search ${sortedModels.length} models..." data-ep-search="${epId}">` : ''}<div class="mcp-tools-list">` + sortedModels.map(m => {
+              // /api/model-endpoints/{id}/models returns {id,name}, not {display}
+              // — fall back so the rows show real names.
+              const _label = m.display || m.name || m.id;
+              return `<label title="${esc(m.id)}" data-ep-model-row data-search="${esc((_label + ' ' + m.id).toLowerCase())}" class="adm-model-row">
                 <input type="checkbox" class="adm-cb-hidden" data-ep-model-id="${esc(m.id)}" ${(usesPinnedPicker ? m.is_pinned : !m.is_hidden) ? 'checked' : ''}>
                 <span class="adm-check-dot" aria-hidden="true"></span>
-                <span>${esc(m.display)}</span>
-              </label>`
-            ).join('') + '</div>';
+                <span>${esc(_label)}</span>
+              </label>`;
+            }).join('') + '</div>';
             const filterRows = (q) => {
               const needle = q.trim().toLowerCase();
               panel.querySelectorAll('[data-ep-model-row]').forEach(row => {

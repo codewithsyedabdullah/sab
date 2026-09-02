@@ -31,12 +31,21 @@ async function refreshSttProvider() {
     const res = await fetch('/api/stt/stats', { credentials: 'same-origin' });
     if (res.ok) {
       const stats = await res.json();
-      _sttProvider = stats.provider || 'disabled';
+      // /api/stt/stats reports provider as a cloud base URL when a
+      // speech-capable endpoint is available, or "none"/"" otherwise.
+      // Normalize to a stable value so the transcription branch works.
+      const raw = stats.provider || '';
+      const available = stats.available === true && !!raw;
+      _sttProvider = available ? raw : 'disabled';
+      if (!available) _sttProvider = 'disabled';
       // Notify the send button to update its icon
       if (window._updateSendBtnIcon) window._updateSendBtnIcon();
+    } else {
+      _sttProvider = 'disabled';
     }
   } catch (e) {
     console.warn('Failed to fetch STT stats:', e);
+    _sttProvider = 'disabled';
   }
 }
 
@@ -189,8 +198,10 @@ export function startRecording(onFileCreated, showToast, showError) {
             const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
             if (onFileCreated) onFileCreated(audioFile);
           }
-        } else if (provider === 'local' || provider.startsWith('endpoint:')) {
-          // Show "Transcribing..." feedback
+        } else if (provider && provider !== 'disabled') {
+          // Server-side transcription. The backend resolves the actual
+          // speech-capable endpoint, so any configured provider (local,
+          // endpoint:<id>, or a direct cloud base URL) proxies to it.
           if (showToast) showToast('Transcribing...', 5000);
           try {
             const transcript = await transcribeOnServer(audioBlob);
@@ -202,7 +213,6 @@ export function startRecording(onFileCreated, showToast, showError) {
           } catch (e) {
             console.error('STT transcription error:', e);
             if (showError) showError('Transcription failed: ' + e.message);
-            // Fallback: attach as file
             const audioFile = new File([audioBlob], `voice-message-${Date.now()}.webm`, { type: 'audio/webm' });
             if (onFileCreated) onFileCreated(audioFile);
           }

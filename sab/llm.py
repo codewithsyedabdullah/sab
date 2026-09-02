@@ -203,7 +203,7 @@ class LLM:
         payload["stream"] = False
 
         resp = requests.post(f"{self._api_base}/api/chat", json=payload, timeout=300)
-        resp.raise_for_status()
+        self._raise_for(resp)
         data = resp.json()
 
         msg = data.get("message", {})
@@ -239,7 +239,7 @@ class LLM:
         resp = requests.post(
             f"{self._api_base}/api/chat", json=payload, stream=True, timeout=300
         )
-        resp.raise_for_status()
+        self._raise_for(resp)
 
         tool_calls_buffer: dict[int, dict] = {}
 

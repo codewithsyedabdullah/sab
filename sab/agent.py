@@ -7,6 +7,7 @@ from typing import Any
 from .config import Config
 from .llm import LLM
 from .tools import ALL_TOOLS, Tool
+from .tools import file_tools
 
 SYSTEM_PROMPT = """Your name is SAB. You are an AI coding agent. You were created by Syed Abdullah Yaqoob. NEVER say you were made by Alibaba, Qwen, or any other company. If asked who made you, always say "Syed Abdullah Yaqoob."
 
@@ -26,13 +27,74 @@ Current workspace: {workspace}
 
 
 class Agent:
-    def __init__(self, config: Config, endpoint: dict | None = None):
+    def __init__(self, config: Config, endpoint: dict | None = None, history: list[dict] | None = None):
         self.config = config
         self.llm = LLM(config.llm, override=endpoint)
         self.endpoint = endpoint or {}
         self.tools: dict[str, Tool] = {t.name: t for t in ALL_TOOLS}
         self.messages: list[dict[str, str]] = []
         self._init_messages()
+        self._seed_history(history)
+
+    def _seed_history(self, history: list[dict] | None):
+        if not history:
+            return
+        # Rebuild the full conversation (including tool_calls + tool result
+        # rounds) so the model remembers not just what was said, but what it
+        # actually did on disk. History entries may carry structured
+        # tool_calls/name/arguments alongside role+content (see agent.dump_history).
+        for h in history:
+            role = h.get("role")
+            if role == "assistant" and h.get("tool_calls"):
+                calls = []
+                for tc in h["tool_calls"]:
+                    fn = tc.get("function") or {}
+                    arg = fn.get("arguments")
+                    if isinstance(arg, str):
+                        try:
+                            arg = json.loads(arg)
+                        except (json.JSONDecodeError, TypeError):
+                            arg = {}
+                    calls.append({
+                        "id": tc.get("id") or f"call_{len(calls)}",
+                        "type": "function",
+                        "function": {"name": fn.get("name", ""), "arguments": json.dumps(arg)},
+                    })
+                if calls:
+                    self.messages.append({
+                        "role": "assistant",
+                        "content": h.get("content") or "",
+                        "tool_calls": calls,
+                    })
+                    continue
+            if role == "tool":
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": h.get("tool_call_id") or "",
+                    "content": h.get("content") or "",
+                })
+                continue
+            if role in ("user", "assistant"):
+                self.messages.append({"role": role, "content": h.get("content") or ""})
+
+    def dump_history(self, max_turns: int = 0) -> list[dict]:
+        # Serialize the conversation (minus the system prompt) for persistence.
+        # Tool-call rounds are kept structured so a later run can restore them.
+        out = []
+        for m in self.messages:
+            if m.get("role") == "system":
+                continue
+            if m.get("role") == "assistant" and m.get("tool_calls"):
+                out.append({
+                    "role": "assistant",
+                    "content": m.get("content") or "",
+                    "tool_calls": m["tool_calls"],
+                })
+            else:
+                out.append({"role": m.get("role"), "content": m.get("content") or ""})
+        if max_turns > 0 and len(out) > max_turns:
+            out = out[-max_turns:]
+        return out
 
     def _init_messages(self):
         system = SYSTEM_PROMPT.format(workspace=str(self.config.workspace))
@@ -48,7 +110,12 @@ class Agent:
         if not tool:
             return f"Unknown tool: {name}"
 
-        result = tool.run(**arguments)
+        file_tools._active_workspace = str(self.config.workspace)
+        try:
+            result = tool.run(**arguments)
+        finally:
+            file_tools._active_workspace = None
+
         if result.success:
             return result.output
         return f"Error: {result.error}\n{result.output}" if result.output else f"Error: {result.error}"
