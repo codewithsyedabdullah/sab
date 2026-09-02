@@ -24,6 +24,7 @@ data/
 # Build-time artifacts: embedded python runtime, offline wheels + Whisper model seed
 desktop/runtime/
 desktop/out-pack/
+desktop/out-build/
 offline/wheels/
 offline/whisper-model/
 
