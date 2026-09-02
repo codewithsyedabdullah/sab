@@ -3355,27 +3355,59 @@ async def stt_transcribe(request: Request):
     ext = Path(filename).suffix.lstrip(".") or "webm"
     ctype = {"mp3": "audio/mpeg", "wav": "audio/wav", "webm": "audio/webm", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac"}.get(ext, "audio/webm")
 
-    ep = _pick_cloud_endpoint()
-    base = _openai_base(ep) if ep else ""
-    if not base:
-        return JSONResponse({"detail": {"message": "Speech-to-text: no speech-capable endpoint configured. Add a model endpoint (Settings → Endpoints) that provides audio transcriptions."}}, status_code=501)
+    import requests as _req
+
+    # Try every enabled speech-capable endpoint in order. The first one may be
+    # out of credits or down (e.g. 402/5xx), so fall through to the next so a
+    # single exhausted account doesn't break voice transcription for the user.
+    endpoints = []
     try:
-        import requests as _req
-        url = base + "/audio/transcriptions"
-        headers = {}
-        api_key = ((ep or {}).get("api_key") or "").strip()
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        files = {"file": (filename, io.BytesIO(data), ctype)}
-        r = await asyncio.to_thread(
-            lambda: _req.post(url, headers=headers, files=files, data={"model": "whisper-1"}, timeout=120)
-        )
-        if r.status_code != 200:
-            return JSONResponse({"detail": {"message": f"Transcription failed (HTTP {r.status_code})"}}, status_code=502)
-        text = (r.json().get("text") or "").strip()
-        return {"text": text}
-    except Exception as e:
-        return JSONResponse({"detail": {"message": f"Transcription error: {str(e)}"}}, status_code=502)
+        endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    except Exception:
+        endpoints = []
+    candidates = []
+    for ep in endpoints or []:
+        if not ep.get("is_enabled", True):
+            continue
+        base = _openai_base(ep)
+        if base:
+            candidates.append((ep, base))
+    if not candidates:
+        return JSONResponse({"detail": {"message": "Speech-to-text: no speech-capable endpoint configured. Add a model endpoint (Settings → Endpoints) that provides audio transcriptions."}}, status_code=501)
+
+    files = {"file": (filename, io.BytesIO(data), ctype)}
+    errors = []
+    for ep, base in candidates:
+        try:
+            url = base + "/audio/transcriptions"
+            headers = {}
+            api_key = ((ep or {}).get("api_key") or "").strip()
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            r = await asyncio.to_thread(
+                lambda: _req.post(url, headers=headers, files=files, data={"model": "whisper-1"}, timeout=120)
+            )
+            if r.status_code == 200:
+                text = (r.json().get("text") or "").strip()
+                if text:
+                    return {"text": text}
+            detail = r.text or ""
+            try:
+                body = r.json()
+                detail = (body.get("error") or {}).get("message") or body.get("detail") or r.text or ""
+            except Exception:
+                pass
+            errors.append(f"{base}: HTTP {r.status_code}" + (f" — {detail[:200]}" if detail else ""))
+        except Exception as e:
+            errors.append(f"{base}: {str(e)[:200]}")
+    # All endpoints failed — build an honest, actionable message. A 402 means the
+    # account is out of credits / billing paused, the most common cause here.
+    joined = " | ".join(errors) if errors else "unknown error"
+    if any("HTTP 402" in e or "402" in e for e in errors):
+        msg = f"Speech-to-text failed: the transcription account is out of credits (HTTP 402). Top up the model endpoint's balance in Settings → Endpoints, or add an endpoint that has credits. ({joined})"
+    else:
+        msg = f"Speech-to-text failed on all endpoints. ({joined})"
+    return JSONResponse({"detail": {"message": msg}}, status_code=502)
 
 
 @app.get("/api/tts/stats")
