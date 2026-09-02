@@ -47,3 +47,6 @@ run_sab.vbs
 start.bat
 start.ps1
 launch.py
+
+# Logo design sources (final assets live in static/)
+logos/
