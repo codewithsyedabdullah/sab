@@ -16,7 +16,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.0.0"
   },
-    "build": {
+  "build": {
     "appId": "ai.sab.desktop",
     "productName": "SAB",
     "files": [
