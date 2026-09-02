@@ -3318,6 +3318,10 @@ async def stt_stats():
     ep = _pick_cloud_endpoint()
     if ep and _openai_base(ep):
         return {"provider": str(ep.get("base_url") or "").rstrip("/"), "available": True}
+    # No usable cloud STT endpoint — report the local Whisper fallback as the
+    # provider so a fresh install still routes voice into server transcription.
+    if _local_stt_available():
+        return {"provider": "local", "available": True}
     return {"provider": "none", "available": False}
 
 
@@ -3336,6 +3340,86 @@ def _pick_cloud_endpoint() -> dict | None:
         if _openai_base(ep):
             return ep
     return None
+
+
+_local_stt_model = None
+_local_stt_lock = asyncio.Lock()
+# Size of the small Whisper model auto-downloaded for free local STT.
+_LOCAL_STT_MODEL = "base"
+
+
+def _local_stt_ensure_runtime() -> tuple[bool, str]:
+    """Make sure the faster-whisper runtime is available, installing it on
+    demand via the interpreter that runs this server. This is what lets free
+    local transcription work on a fresh SAB install without cloud credits:
+    the small Python dep is pulled in once (needs internet on first use), and
+    the model file itself is cached under data/whisper/ thereafter."""
+    try:
+        import faster_whisper  # noqa: F401
+        return True, ""
+    except Exception:
+        pass
+    import subprocess
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "faster-whisper"],
+            timeout=1200, check=False,
+        )
+        import faster_whisper  # noqa: F401
+        return True, ""
+    except Exception as e:
+        return False, f"failed to install local speech runtime: {str(e)[:200]}"
+
+
+def _local_stt_available() -> bool:
+    """True if free local transcription could work (runtime installed or
+    installable). Used by /api/stt/stats to decide whether to advertise the
+    local provider without forcing a slow install at startup."""
+    try:
+        import faster_whisper  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _local_stt_transcribe(data: bytes, filename: str = "audio.webm") -> str:
+    """Free, offline speech-to-text using the bundled faster-whisper runtime.
+
+    The small 'base' model is auto-downloaded once into DATA_DIR/whisper/ on
+    first use and cached for every later request. This is what makes voice
+    transcription work out-of-the-box for installs with no cloud credits."""
+    global _local_stt_model
+    ok, _err = _local_stt_ensure_runtime()
+    if not ok:
+        raise RuntimeError("local speech runtime unavailable")
+    ext = Path(filename).suffix.lstrip(".") or "webm"
+    if ext not in ("wav", "mp3", "ogg", "m4a", "aac"):
+        ext = "webm"
+    import tempfile
+    from faster_whisper import WhisperModel
+
+    if _local_stt_model is None:
+        model_dir = DATA_DIR / "whisper"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        _local_stt_model = WhisperModel(
+            _LOCAL_STT_MODEL,
+            device="cpu",
+            compute_type="int8",
+            download_root=str(model_dir),
+        )
+    with tempfile.NamedTemporaryFile(suffix="." + ext, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        segments, _info = _local_stt_model.transcribe(
+            tmp_path, beam_size=5, vad_filter=True
+        )
+        return "".join(s.text for s in segments).strip()
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
 
 
 @app.post("/api/stt/transcribe")
@@ -3372,8 +3456,6 @@ async def stt_transcribe(request: Request):
         base = _openai_base(ep)
         if base:
             candidates.append((ep, base))
-    if not candidates:
-        return JSONResponse({"detail": {"message": "Speech-to-text: no speech-capable endpoint configured. Add a model endpoint (Settings → Endpoints) that provides audio transcriptions."}}, status_code=501)
 
     files = {"file": (filename, io.BytesIO(data), ctype)}
     errors = []
@@ -3400,14 +3482,26 @@ async def stt_transcribe(request: Request):
             errors.append(f"{base}: HTTP {r.status_code}" + (f" — {detail[:200]}" if detail else ""))
         except Exception as e:
             errors.append(f"{base}: {str(e)[:200]}")
-    # All endpoints failed — build an honest, actionable message. A 402 means the
-    # account is out of credits / billing paused, the most common cause here.
-    joined = " | ".join(errors) if errors else "unknown error"
-    if any("HTTP 402" in e or "402" in e for e in errors):
-        msg = f"Speech-to-text failed: the transcription account is out of credits (HTTP 402). Top up the model endpoint's balance in Settings → Endpoints, or add an endpoint that has credits. ({joined})"
-    else:
-        msg = f"Speech-to-text failed on all endpoints. ({joined})"
-    return JSONResponse({"detail": {"message": msg}}, status_code=502)
+
+    # No cloud endpoint returned a transcript. Fall back to the free local
+    # Whisper runtime so voice transcription still works with no cloud credits.
+    try:
+        async with _local_stt_lock:
+            text = await asyncio.to_thread(_local_stt_transcribe, data, filename)
+        if text:
+            return {"text": text}
+        return {"text": ""}
+    except Exception as e:
+        # No local runtime either — build an honest, actionable message.
+        joined = " | ".join(errors) if errors else "unknown error"
+        if not candidates:
+            local_hint = "" if _local_stt_available() else " Install the bundled speech runtime or add a model endpoint (Settings → Endpoints) that provides audio transcriptions."
+            return JSONResponse({"detail": {"message": f"Speech-to-text: no working transcription engine. ({joined}){local_hint}"}}, status_code=501)
+        if any("HTTP 402" in e or "402" in e for e in errors):
+            msg = f"Speech-to-text failed: the transcription account is out of credits (HTTP 402) and local transcription is unavailable. Top up the model endpoint's balance or add an endpoint with credits. ({joined})"
+        else:
+            msg = f"Speech-to-text failed on all endpoints and local transcription. ({joined})"
+        return JSONResponse({"detail": {"message": msg}}, status_code=502)
 
 
 @app.get("/api/tts/stats")
