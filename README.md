@@ -1,17 +1,24 @@
 <div align="center">
 
+<img src="static/icon.ico" width="100">
+
 # SAB
 
-### Open-source AI coding agent that runs on your machine.
+### Your AI coding agent. Runs locally. Stays private.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)]()
-[![GitHub stars](https://img.shields.io/github/stars/codewithsyedabdullah/sab?style=social)](https://github.com/codewithsyedabdullah/sab)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![Electron](https://img.shields.io/badge/electron-33-47848F.svg?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![GitHub release](https://img.shields.io/github/v/release/codewithsyedabdullah/sab?style=for-the-badge&color=green)](https://github.com/codewithsyedabdullah/sab/releases/latest)
+[![GitHub stars](https://img.shields.io/github/stars/codewithsyedabdullah/sab?style=for-the-badge&color=yellow)](https://github.com/codewithsyedabdullah/sab)
+[![GitHub issues](https://img.shields.io/github/issues/codewithsyedabdullah/sab?style=for-the-badge)](https://github.com/codewithsyedabdullah/sab/issues)
 
+<br>
+
+**CLI + Desktop app for AI-assisted coding.**
 **Your code never leaves your machine.**
 
-[Download for Windows](#installation) · [Quick Start](#quick-start) · [Report Bug](https://github.com/codewithsyedabdullah/sab/issues) · [Contributing](CONTRIBUTING.md)
+[Download](#installation) · [Quick Start](#quick-start) · [Features](#features) · [Report Bug](https://github.com/codewithsyedabdullah/sab/issues) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -19,28 +26,59 @@
 
 ## What is SAB?
 
-SAB is a **self-hosted, open-source AI coding assistant** that works locally on your machine. It has a CLI for terminal power users, a web UI for browser-based chat, and a native desktop app — all connected to the same server.
+SAB is an **open-source, privacy-first coding agent** that lives on your machine. Talk to it from the **terminal** (CLI) or the **native desktop app** — your code stays local, always.
 
-Use **free local models** via Ollama, or connect to **cloud APIs** like Claude and GPT-4. Your code, your machine, your choice.
+Connect it to **free local models** through Ollama, or plug in **cloud APIs** like Claude and GPT-4. Full voice input included — works completely offline.
 
 ---
 
 ## Features
 
-| | Feature | Description |
-|---|---|---|
-| 🔒 | **Privacy-first** | All code stays on your machine. No cloud uploads. |
-| 🖥️ | **CLI + Web + Desktop** | Three interfaces — terminal, browser, or native desktop app. |
-| 🤖 | **Local LLM** | Free offline coding with Ollama (CodeLlama, DeepSeek, Qwen). |
-| ☁️ | **Cloud LLM** | Claude, GPT-4, and any OpenAI-compatible API. |
-| 🎙️ | **Voice input** | Speech-to-text built in — works fully offline. |
-| 📝 | **File tools** | Read, write, and edit files with surgical precision. |
-| ⚡ | **Shell access** | Run commands, install packages, execute code. |
-| 🔍 | **Code search** | Grep and glob across your entire codebase. |
-| 🧠 | **Session memory** | Conversations persist across sessions. |
-| 📡 | **Real-time streaming** | Token-by-token responses as they're generated. |
-| 👥 | **Multi-user auth** | Password-hashed accounts with per-user sessions. |
-| 🎨 | **Themes** | Customizable light/dark themes. |
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Core
+- **CLI interface** — terminal-native, fast, no bloat
+- **Desktop app** — native Electron window with system tray
+- **Local LLM** — free offline coding via Ollama
+- **Cloud LLM** — Claude, GPT-4, any OpenAI-compatible API
+- **Voice input** — speech-to-text, fully offline
+
+</td>
+<td width="50%" valign="top">
+
+### Tools
+- **Read files** — view code with line numbers
+- **Write files** — create or overwrite files
+- **Edit files** — surgical find-and-replace
+- **Run commands** — shell access, install packages
+- **Search code** — grep and glob across your codebase
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+### Intelligence
+- **Session memory** — conversations persist across sessions
+- **Streaming responses** — real-time token-by-token output
+- **Multi-provider** — switch between Ollama, Claude, GPT-4
+- **Model catalog** — browse and download models from HuggingFace
+
+</td>
+<td width="50%" valign="top">
+
+### Desktop App
+- **Embedded Python** — no system Python required
+- **Offline STT** — voice input works without internet
+- **System tray** — runs in background, stays out of your way
+- **Auto-updates** — download new releases from GitHub
+- **Multi-user auth** — password-hashed accounts
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -48,61 +86,53 @@ Use **free local models** via Ollama, or connect to **cloud APIs** like Claude a
 
 ### Desktop App (Recommended)
 
-Download the installer and run it — everything is included.
+Download the installer, run it, and start coding. Everything is bundled — Python runtime, STT engine, Whisper model. No internet required after install.
 
-| Installer | Size | Description |
-|-----------|------|-------------|
-| [**SAB-Setup-1.0.0.exe**](https://github.com/codewithsyedabdullah/sab/releases/latest/download/SAB-Setup-1.0.0.exe) | ~276 MB | Full NSIS installer with Start Menu shortcuts |
-| [**SAB-Portable-1.0.0.exe**](https://github.com/codewithsyedabdullah/sab/releases/latest/download/SAB-Portable-1.0.0.exe) | ~256 MB | Portable — run from anywhere, no install needed |
+<div align="center">
 
-> **What's included:** Python runtime, faster-whisper STT, Whisper base model (141 MB) — fully offline, no internet required after install.
+| | Installer | Size | Description |
+|---|-----------|------|-------------|
+| ⬇️ | [**SAB-Setup-1.0.0.exe**](https://github.com/codewithsyedabdullah/sab/releases/latest/download/SAB-Setup-1.0.0.exe) | **276 MB** | Full installer with Start Menu shortcuts |
+| ⬇️ | [**SAB-Portable-1.0.0.exe**](https://github.com/codetworksyedabdullah/sab/releases/latest/download/SAB-Portable-1.0.0.exe) | **276 MB** | Portable — run from anywhere |
 
-### pip (CLI + Web UI)
+</div>
+
+### From Source (CLI)
 
 ```bash
-# Install from source
 git clone https://github.com/codewithsyedabdullah/sab.git
 cd sab
 pip install -e .
 ```
 
-### Requirements (pip install)
-
-- Python 3.10+
-- [Ollama](https://ollama.ai) for local models (or a cloud API key)
+Requires **Python 3.10+** and [Ollama](https://ollama.ai) (for local models) or a cloud API key.
 
 ---
 
 ## Quick Start
 
-### 1. Start a local model (free, offline)
+### Option 1: Local models (free, offline)
 
 ```bash
-# Install Ollama
-# https://ollama.ai
+# 1. Install Ollama — https://ollama.ai
 
-# Pull a coding model
+# 2. Pull a coding model
 ollama pull codellama:13b
-```
 
-### 2. Launch SAB
-
-```bash
-# Web UI (recommended)
-sab web
-
-# CLI
+# 3. Launch SAB
 sab chat
 ```
 
-Open **http://localhost:3000** in your browser.
-
-### 3. Or use a cloud model
+### Option 2: Cloud models
 
 ```bash
 sab chat --provider anthropic --model claude-sonnet-4-20250514 --api-key sk-xxx
 sab chat --provider openai --model gpt-4o --api-key sk-xxx
 ```
+
+### Option 3: Desktop app
+
+Download the [installer](#installation), run it, and open SAB from your Start Menu.
 
 ---
 
@@ -129,12 +159,12 @@ sab chat --provider openai --model gpt-4o --api-key sk-xxx
 
 ### Local (Ollama) — Free
 
-| Model | Size | Notes |
-|-------|------|-------|
-| `codellama:13b` | 7.4 GB | Best for code (recommended) |
-| `codellama:34b` | 19 GB | Larger, more capable |
-| `deepseek-coder:6.7b` | 3.8 GB | Great for code, lightweight |
-| `qwen2.5-coder:7b` | 4.4 GB | Strong code model |
+| Model | Size | Best For |
+|-------|------|----------|
+| `codellama:13b` | 7.4 GB | Code generation (recommended) |
+| `codellama:34b` | 19 GB | Complex tasks, larger context |
+| `deepseek-coder:6.7b` | 3.8 GB | Lightweight, fast coding |
+| `qwen2.5-coder:7b` | 4.4 GB | Strong general coding |
 
 ### Cloud (API) — Paid
 
@@ -146,73 +176,77 @@ sab chat --provider openai --model gpt-4o --api-key sk-xxx
 
 ---
 
-## Tools
+## Architecture
 
-SAB has access to these tools during conversations:
-
-| Tool | Description |
-|------|-------------|
-| `read_file` | Read file contents with line numbers |
-| `write_file` | Create or overwrite a file |
-| `edit_file` | Surgical find-and-replace in a file |
-| `run_shell` | Execute shell commands |
-| `grep` | Search code with regex |
-| `glob` | Find files by pattern |
+```
+sab/
+├── sab/                  # Core Python package
+│   ├── agent.py          # AI agent logic
+│   ├── llm.py            # LLM provider abstraction
+│   ├── config.py         # Configuration management
+│   └── file_tools.py     # File operation tools
+├── server.py             # API server (desktop app backend)
+├── static/               # Desktop app frontend
+├── desktop/              # Electron wrapper
+│   ├── electron/         # Main process + preload
+│   ├── runtime/          # Embedded Python (build-time)
+│   └── prepare-runtime.ps1
+├── offline/              # Offline wheels + Whisper model seed
+├── CONTRIBUTING.md       # Contributor guidelines
+├── PRIVACY.md            # Privacy policy
+├── SECURITY.md           # Security practices
+└── LICENSE               # MIT License
+```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
+| Component | Technology |
+|-----------|-----------|
 | CLI | Python 3.10+ · Typer · Rich |
+| Agent | LiteLLM (multi-provider LLM) |
 | Server | FastAPI · Uvicorn · WebSockets |
-| LLM | LiteLLM (multi-provider) |
 | STT | faster-whisper (offline) · Cloud fallback |
 | Desktop | Electron 33 · electron-builder |
-| Frontend | Vanilla JS · HTML/CSS |
-
----
-
-## Project Structure
-
-```
-sab/
-├── sab/                # Core Python package (agent, LLM, tools)
-├── server.py           # FastAPI server
-├── static/             # Web UI (HTML/CSS/JS)
-├── desktop/            # Electron desktop app
-│   ├── electron/       # Main process
-│   ├── runtime/        # Embedded Python (build-time)
-│   └── prepare-runtime.ps1
-├── offline/            # Offline wheels + model seed
-└── tests/              # Test suite
-```
+| Auth | PBKDF2-SHA256 password hashing |
 
 ---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+```bash
+# 1. Fork and clone
+git clone https://github.com/YOUR_USERNAME/sab.git
+
+# 2. Create a branch
+git checkout -b feature/amazing-feature
+
+# 3. Make changes and commit
+git commit -m "feat: add amazing feature"
+
+# 4. Push and open a PR
+git push origin feature/amazing-feature
+```
 
 ---
 
 ## License
 
-SAB is open-source software distributed under the **MIT License**. See [LICENSE](LICENSE) for the full text.
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for details.
 
 ---
 
-## Legal
+<div align="center">
 
-- [PRIVACY](PRIVACY.md) — How SAB stores and processes your data.
-- [TERMS](TERMS.md) — Terms of service.
-- [NOTICE](NOTICE.md) — Third-party attributions.
-- [CONTRIBUTING](CONTRIBUTING.md) — Contributor guidelines.
-- [SECURITY](SECURITY.md) — Vulnerability reporting and security practices.
+### Legal
+
+[Privacy](PRIVACY.md) · [Terms](TERMS.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Notices](NOTICE.md)
+
+---
+
+**Built with care by [Syed Abdullah Yaqoob](https://github.com/codewithsyedabdullah)**
+
+</div>
