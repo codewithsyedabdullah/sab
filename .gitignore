@@ -40,3 +40,10 @@ make_icon.py
 tc_*.txt
 tl_*.txt
 *.err
+
+# Local launcher scripts (not for distribution)
+run_sab.bat
+run_sab.vbs
+start.bat
+start.ps1
+launch.py
