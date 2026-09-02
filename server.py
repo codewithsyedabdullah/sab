@@ -3347,6 +3347,13 @@ _local_stt_lock = asyncio.Lock()
 # Size of the small Whisper model auto-downloaded for free local STT.
 _LOCAL_STT_MODEL = "base"
 
+# When shipped in the desktop installer, the Whisper model lives inside the
+# embedded runtime (resources/runtime/models/whisper/).  This path is tried
+# first so transcription works fully offline with zero downloads.
+_bundled_model_dir = Path(__file__).resolve().parent.parent / "runtime" / "models" / "whisper"
+if not _bundled_model_dir.is_dir():
+    _bundled_model_dir = None
+
 
 def _local_stt_ensure_runtime() -> tuple[bool, str]:
     """Make sure the faster-whisper runtime is available, installing it on
@@ -3386,8 +3393,9 @@ def _local_stt_transcribe(data: bytes, filename: str = "audio.webm") -> str:
     """Free, offline speech-to-text using the bundled faster-whisper runtime.
 
     The small 'base' model is auto-downloaded once into DATA_DIR/whisper/ on
-    first use and cached for every later request. This is what makes voice
-    transcription work out-of-the-box for installs with no cloud credits."""
+    first use and cached for every later request.  When shipped in the desktop
+    installer the model lives in the bundled runtime and is available instantly
+    with no download required."""
     global _local_stt_model
     ok, _err = _local_stt_ensure_runtime()
     if not ok:
@@ -3399,7 +3407,9 @@ def _local_stt_transcribe(data: bytes, filename: str = "audio.webm") -> str:
     from faster_whisper import WhisperModel
 
     if _local_stt_model is None:
-        model_dir = DATA_DIR / "whisper"
+        # Prefer the bundled model (ships with the desktop installer) so the
+        # first transcription is instant and works fully offline.
+        model_dir = _bundled_model_dir or (DATA_DIR / "whisper")
         model_dir.mkdir(parents=True, exist_ok=True)
         _local_stt_model = WhisperModel(
             _LOCAL_STT_MODEL,
@@ -3411,8 +3421,11 @@ def _local_stt_transcribe(data: bytes, filename: str = "audio.webm") -> str:
         tmp.write(data)
         tmp_path = tmp.name
     try:
+        # VAD filter is disabled: it requires onnxruntime which is not bundled
+        # to keep the installer size small; ctranslate2 handles transcription
+        # directly without it.
         segments, _info = _local_stt_model.transcribe(
-            tmp_path, beam_size=5, vad_filter=True
+            tmp_path, beam_size=5, vad_filter=False
         )
         return "".join(s.text for s in segments).strip()
     finally:

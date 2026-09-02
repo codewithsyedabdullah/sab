@@ -46,9 +46,17 @@ function sabRoot() {
 }
 
 function pythonPath() {
-  // Allow override, else use known-good Python locations on Windows, else `python`.
+  // Allow override, else use the bundled embedded Python runtime for fully
+  // offline STT, else fall back to known system Python locations.
   const override = (process.env.SAB_PYTHON || '').trim();
   if (override) return override;
+
+  // Bundled embedded runtime ships inside resources/runtime/python.exe.
+  if (app.isPackaged) {
+    const bundled = path.join(process.resourcesPath, 'runtime', 'python.exe');
+    if (fs.existsSync(bundled)) return bundled;
+  }
+
   const candidates = ['C:\\Python314\\python.exe', 'C:\\Python313\\python.exe', 'C:\\Python312\\python.exe', 'python'];
   for (const c of candidates) {
     if (c === 'python') return 'python';

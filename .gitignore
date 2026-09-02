@@ -21,6 +21,12 @@ sab/web/static/
 # Runtime data (auth hashes + stored API keys) - never commit
 data/
 
+# Build-time artifacts: embedded python runtime, offline wheels + Whisper model seed
+desktop/runtime/
+desktop/out-pack/
+offline/wheels/
+offline/whisper-model/
+
 # Throwaway audit/test scratch
 test_*.py
 check_*.py
