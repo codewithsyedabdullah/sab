@@ -45,6 +45,14 @@ document.addEventListener('DOMContentLoaded', markComposerUserEdited, { once: tr
     const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
     if (!res.ok) return;
     const data = await res.json().catch(() => ({}));
+    // Auth gate: if the server requires authentication and this session is
+    // anonymous, send the user to the login page instead of rendering the main
+    // UI with a flood of 401s. The login page does not load this module, so
+    // there is no redirect loop.
+    if (data && data.auth_enabled === true && data.authenticated === false) {
+      window.location.href = '/login';
+      return;
+    }
     const liveUser = (data && data.username) || '';
     if (!liveUser) return;
     const KEY = 'sab-auth-user';

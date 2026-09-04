@@ -25,6 +25,11 @@ desktop/runtime/
 desktop/out-pack/
 desktop/out-build/
 
+# Offline seed files (Whisper model ~139MB exceeds GitHub's 100MB/file limit).
+# The model is baked into the installers at build time via prepare-runtime.ps1,
+# so it lives only on disk / in release assets, not in the repo.
+offline/
+
 # Local launcher scripts (not for distribution)
 run_sab.bat
 run_sab.vbs

@@ -196,6 +196,17 @@ export function initSidebarLayout(Storage, opts) {
   if (hamburgerBtn) {
     hamburgerBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      // Shift+click swaps the sidebar to the other side (same as #sidebar-toggle-btn).
+      if (e.shiftKey) {
+        e.preventDefault();
+        const sidebarH = document.getElementById('sidebar');
+        const wantRight = !(sidebarH && sidebarH.classList.contains('right-side'));
+        if (sidebarH) sidebarH.classList.toggle('right-side', wantRight);
+        try { Storage.set(Storage.KEYS.SIDEBAR_SIDE, wantRight ? 'right' : 'left'); } catch (_) {}
+        if (documentModule && documentModule.swapSide) { try { documentModule.swapSide(); } catch (_) {} }
+        syncRailSide();
+        return;
+      }
       const sidebar = document.getElementById('sidebar');
 
       _userToggledSidebar = true;

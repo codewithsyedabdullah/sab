@@ -182,7 +182,8 @@
       // Per-route Android home-screen icon. We swap the <link rel="manifest">
       // to a per-page Blob URL with this route's SVG icon — that way "Add to
       // Home Screen" picks up the route-specific glyph instead of the shared
-      // boat logo. Falls back silently on browsers without Blob URL support.      try {
+      // boat logo. Falls back silently on browsers without Blob URL support.
+      try {
         if (inner && typeof Blob !== 'undefined') {
           var pwa = {
             name: (titles[path] || 'SAB'),
@@ -1041,12 +1042,6 @@
       <div class="chat-input-top">
         <div id="message-ghost" class="ghost-text-overlay" aria-hidden="true"></div>
         <textarea id="message" placeholder="Message SAB..." required autocomplete="off" aria-label="Message input" rows="1" autofocus></textarea>
-        <div id="plan-mode-status" class="plan-mode-status" hidden>
-          <span class="plan-mode-status-label">Plan mode</span>
-          <button type="button" id="plan-mode-status-toggle" class="plan-mode-status-toggle" aria-label="Turn off plan mode" aria-pressed="true">
-            <span></span>
-          </button>
-        </div>
         <!-- Model picker (inside chatbox, top-right) -->
         <div class="model-picker-wrap" id="model-picker-wrap">
           <button type="button" class="model-picker-btn" id="model-picker-btn" title="Switch model"><span id="model-picker-label">Select model</span> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg></button>
@@ -1198,6 +1193,11 @@
           </button>
         </div>
         <div class="chat-input-right">
+          <!-- Plan mode toggle (single button) – wired by initPlanToggle() in app.js -->
+          <button type="button" id="plan-toggle-btn" class="plan-mode-btn plan-mode-label-btn" aria-label="Plan mode" aria-pressed="false" title="Plan mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Plan</span>
+          </button>
           <!-- Agent / Chat mode toggle -->
           <div class="mode-toggle">
             <button type="button" class="mode-toggle-btn active" id="mode-agent-btn" aria-pressed="true">Agent</button>

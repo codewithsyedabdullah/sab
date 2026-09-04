@@ -412,6 +412,7 @@ async def auth_status(request: Request):
     is_admin = _current_is_admin(request)
     return {
         "authenticated": authenticated,
+        "auth_enabled": _auth_enabled(),
         "configured": configured,
         "signup_enabled": True,
         "user": {"username": user, "is_admin": is_admin, "display_name": user.upper()} if authenticated else None,

@@ -2682,6 +2682,37 @@ body.bg-pattern-sparkles {
 	      color: var(--accent);
 	      background: color-mix(in srgb, var(--accent) 14%, transparent);
 	    }
+	    /* Single on/off "Plan" button (wording toggle) in .chat-input-right */
+	    .plan-mode-btn.plan-mode-label-btn {
+	      width: auto;
+	      height: 28px;
+	      top: 0;
+	      padding: 0 10px;
+	      display: inline-flex;
+	      align-items: center;
+	      gap: 5px;
+	      background: none;
+	      border: 1px solid var(--border);
+	      border-radius: 10px;
+	      color: color-mix(in srgb, var(--fg) 40%, transparent);
+	      font-size: 11px;
+	      font-weight: 500;
+	      font-family: inherit;
+	      opacity: 1;
+	      white-space: nowrap;
+	      transition: color 0.2s, background 0.2s, border-color 0.2s;
+	    }
+	    .plan-mode-btn.plan-mode-label-btn:hover {
+	      color: color-mix(in srgb, var(--fg) 70%, transparent);
+	    }
+	    .plan-mode-btn.plan-mode-label-btn.active {
+	      color: var(--accent);
+	      border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+	      background: color-mix(in srgb, var(--accent) 14%, transparent);
+	    }
+	    @media (max-width: 768px) {
+	      .chat-input-right .plan-mode-btn.plan-mode-label-btn { display: none; }
+	    }
     /* GitHub-style task lists (- [ ] / - [x]) */
     li.task-item {
       list-style: none;
