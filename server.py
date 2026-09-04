@@ -543,7 +543,7 @@ def _probe_endpoint_models(ep: dict):
         if api_key and not is_ollama:
             headers["Authorization"] = f"Bearer {api_key}"
         if is_ollama:
-            r = _req.get(f"{base}/api/tags", headers=headers, timeout=8)
+            r = _req.get(f"{base}/api/tags", headers=headers, timeout=15)
             if r.ok:
                 raw = r.json().get("models", [])
                 models_list = [{"id": m.get("name") or m.get("model") or m, "name": m.get("name") or m} for m in raw]
@@ -553,7 +553,7 @@ def _probe_endpoint_models(ep: dict):
             url = base + "/models"
         else:
             url = base + "/v1/models"
-        r = _req.get(url, headers=headers, timeout=8)
+        r = _req.get(url, headers=headers, timeout=45)
         if r.ok:
             data = r.json()
             raw = data.get("data") or data.get("models") or []
@@ -568,6 +568,60 @@ def _probe_endpoint_models(ep: dict):
         return (r.ok, models_list, "empty" if r.ok and not models_list else ("ok" if r.ok else "offline"), None)
     except Exception as e:
         return (False, models_list, "offline", str(e))
+
+
+# In-memory probe cache so /api/models and refresh calls don't hammer every
+# configured provider on each request. Results are reused for _EP_PROBE_TTL
+# seconds; slow-but-working providers (e.g. some OpenAI-compatible gateways)
+# no longer flap to "offline" and polling costs drop dramatically.
+_ep_probe_cache: dict[str, tuple] = {}
+_EP_PROBE_TTL = 60.0
+_ep_probe_lock = asyncio.Lock()
+
+
+def _probe_endpoint_cached(ep: dict, force: bool = False):
+    """Probe an endpoint, using/updating the cache. TTL-cached: a transient
+    failure reuses the last good result so the endpoint does not go offline."""
+    cache_key = ep.get("id") or (ep.get("base_url") or ep.get("url") or "")
+    cached = _ep_probe_cache.get(cache_key)
+    if not force and cached and (time.time() - cached[4] < _EP_PROBE_TTL):
+        return cached[:4]
+    result = _probe_endpoint_models(ep)
+    _ep_probe_cache[cache_key] = (*result, time.time())
+    return result
+
+
+def _ep_known_models(ep: dict) -> list[dict]:
+    """Last-known models for an endpoint: cached probe, then stored list."""
+    cache_key = ep.get("id") or (ep.get("base_url") or ep.get("url") or "")
+    cached = _ep_probe_cache.get(cache_key)
+    if cached and cached[1]:
+        return cached[1]
+    stored = ep.get("models_list") or ep.get("models") or []
+    out = []
+    for m in stored:
+        if isinstance(m, dict):
+            out.append({"id": m.get("id") or m.get("name") or str(m), "name": m.get("name") or m.get("id") or str(m)})
+        elif isinstance(m, str):
+            out.append({"id": m, "name": m})
+    return out
+
+
+async def _background_refresh(ep: dict):
+    """Non-blocking probe that updates the probe cache and stored model list.
+    Runs in a thread so a slow provider never blocks an API response."""
+    try:
+        async with _ep_probe_lock:
+            online, models_list, status, err = await asyncio.to_thread(_probe_endpoint_models, ep)
+        cache_key = ep.get("id") or (ep.get("base_url") or ep.get("url") or "")
+        _ep_probe_cache[cache_key] = (online, models_list, status, err, time.time())
+        endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+        for e in endpoints:
+            if e.get("id") == ep.get("id"):
+                e.update({"models_list": models_list, "model_count": len(models_list), "online": online, "status": status})
+        _save_json(DATA_DIR / "model_endpoints.json", endpoints)
+    except Exception:
+        pass
 
 
 def _resolve_endpoint(endpoint_id: str) -> dict | None:
@@ -599,7 +653,9 @@ async def models():
             items = []
     except Exception:
         items = []
-    # Merge stored, enabled cloud endpoints (probed)
+    # Merge stored, enabled cloud endpoints. Respond INSTANTLY with last-known
+    # models (cache/storage); refresh stale probes in the background so a slow
+    # provider never blocks the model list and never drops offline.
     endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
     for ep in endpoints:
         if not ep.get("is_enabled", True):
@@ -607,9 +663,15 @@ async def models():
         base = _ep_base(ep.get("base_url") or ep.get("url"), ep.get("endpoint_kind"))
         if not base or base.rstrip("/") == "http://localhost:11434":
             continue
-        online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
-        if not online or not models_list:
-            continue
+        cache_key = ep.get("id") or base
+        cached = _ep_probe_cache.get(cache_key)
+        if cached and (time.time() - cached[4] < _EP_PROBE_TTL):
+            online, models_list, status, err = cached[0], cached[1], cached[2], cached[3]
+        else:
+            # Stale or never probed: serve known models now, refresh offline.
+            online, models_list, status, err = False, _ep_known_models(ep), "refresh", None
+            asyncio.create_task(_background_refresh(ep))
+        models_list = models_list or _ep_known_models(ep)
         items.append({
             "id": ep.get("id"),
             "name": ep.get("name") or base,
@@ -617,9 +679,11 @@ async def models():
             "endpoint_id": ep.get("id"),
             "endpoint_name": ep.get("name") or base,
             "endpoint_url": base,
+            "online": bool(online or models_list),
             "models": [m["id"] for m in models_list],
             "models_display": [m["id"] for m in models_list],
             "category": "api",
+            "probe_error": err,
         })
     if not items:
         items = [{
@@ -699,9 +763,16 @@ async def create_model_endpoint(request: Request):
     ep["online"] = online
     ep["status"] = status
     ep["models"] = models_list
-    ep["models_list"] = [m["id"] for m in models_list]
+    ep["models_list"] = models_list
     ep["model_count"] = len(models_list)
     ep["error"] = err
+    _ep_probe_cache[ep["id"]] = (online, models_list, status, err, time.time())
+    # Persist the probed model list so /api/models can keep showing known
+    # models even if a later live probe is slow/flaky.
+    for i, e in enumerate(endpoints):
+        if e.get("id") == ep["id"]:
+            e.update({"models_list": models_list, "model_count": len(models_list), "status": status})
+    _save_json(DATA_DIR / "model_endpoints.json", endpoints)
     return ep
 
 
@@ -734,8 +805,15 @@ async def patch_model_endpoint(id: str, request: Request):
 async def endpoint_models(id: str, refresh: bool = False):
     ep = _resolve_endpoint(id)
     if not ep:
-        return {"models": []}
-    online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
+        return {"models": [], "online": False}
+    online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_cached, ep, force=bool(refresh))
+    models_list = models_list or _ep_known_models(ep)
+    # Persist known models so /api/models can fall back to them later.
+    endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    for e in endpoints:
+        if e.get("id") == id:
+            e.update({"models_list": models_list, "model_count": len(models_list), "online": online})
+    _save_json(DATA_DIR / "model_endpoints.json", endpoints)
     return {"models": models_list, "online": online}
 
 
@@ -743,8 +821,15 @@ async def endpoint_models(id: str, refresh: bool = False):
 async def refresh_endpoint_models(id: str):
     ep = _resolve_endpoint(id)
     if not ep:
-        return {"models": []}
-    online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_models, ep)
+        return {"models": [], "online": False}
+    async with _ep_probe_lock:
+        online, models_list, _status, _err = await asyncio.to_thread(_probe_endpoint_cached, ep, force=True)
+    models_list = models_list or _ep_known_models(ep)
+    endpoints = _load_json(DATA_DIR / "model_endpoints.json", [])
+    for e in endpoints:
+        if e.get("id") == id:
+            e.update({"models_list": models_list, "model_count": len(models_list), "online": online})
+    _save_json(DATA_DIR / "model_endpoints.json", endpoints)
     return {"models": models_list, "online": online}
 
 

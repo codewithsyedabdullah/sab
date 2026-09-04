@@ -3,6 +3,8 @@
 # This assembles a fully offline runtime under desktop/runtime/ containing:
 #   - a small CPython embeddable distribution (no metal, ~36MB unpacked)
 #   - faster-whisper + deps (onnxruntime removed: not needed, VAD is disabled)
+#   - python-multipart (required by FastAPI/Starlette for request.form() on the
+#     ~25 multipart API endpoints: model-endpoints add, STT, uploads, etc.)
 #   - the small Whisper 'base' model pre-seeded at runtime/models/whisper/
 #
 # Produced at build time and shipped via extraResources as resources/runtime/.
@@ -75,10 +77,10 @@ Ensure-Download 'https://bootstrap.pypa.io/get-pip.py' $getPip
 # into the host machine's user/global site-packages.
 Write-Host '== [3/5] Installing faster-whisper INTO runtime site-packages (offline) =='
 if (Test-Path -LiteralPath $wheelsDir) {
-    & $pyexe -m pip install --no-warn-script-location --no-index --find-links $wheelsDir --target $sitePkgs faster-whisper | Out-Host
+    & $pyexe -m pip install --no-warn-script-location --no-index --find-links $wheelsDir --target $sitePkgs faster-whisper python-multipart | Out-Host
 } else {
     Write-Host '!! offline wheels not found; installing from PyPI instead'
-    & $pyexe -m pip install --no-warn-script-location --target $sitePkgs faster-whisper | Out-Host
+    & $pyexe -m pip install --no-warn-script-location --target $sitePkgs faster-whisper python-multipart | Out-Host
 }
 
 Write-Host '== [4/5] Removing onnxruntime (unused by ctranslate2, VAD disabled) =='

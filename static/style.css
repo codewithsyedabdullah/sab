@@ -2682,33 +2682,48 @@ body.bg-pattern-sparkles {
 	      color: var(--accent);
 	      background: color-mix(in srgb, var(--accent) 14%, transparent);
 	    }
-	    /* Single on/off "Plan" button (wording toggle) in .chat-input-right */
+	    /* Single on/off "Plan mode" wording button (.chat-input-right) */
 	    .plan-mode-btn.plan-mode-label-btn {
 	      width: auto;
 	      height: 28px;
 	      top: 0;
-	      padding: 0 10px;
+	      padding: 0 11px 0 9px;
 	      display: inline-flex;
 	      align-items: center;
-	      gap: 5px;
+	      gap: 6px;
 	      background: none;
 	      border: 1px solid var(--border);
-	      border-radius: 10px;
-	      color: color-mix(in srgb, var(--fg) 40%, transparent);
+	      border-radius: 999px;
+	      color: color-mix(in srgb, var(--fg) 42%, transparent);
 	      font-size: 11px;
 	      font-weight: 500;
 	      font-family: inherit;
 	      opacity: 1;
 	      white-space: nowrap;
+	      cursor: pointer;
 	      transition: color 0.2s, background 0.2s, border-color 0.2s;
 	    }
+	    .plan-mode-btn.plan-mode-label-btn .plan-mode-dot {
+	      width: 7px;
+	      height: 7px;
+	      border-radius: 50%;
+	      background: color-mix(in srgb, var(--fg) 28%, transparent);
+	      transition: background 0.2s;
+	      flex: none;
+	    }
 	    .plan-mode-btn.plan-mode-label-btn:hover {
-	      color: color-mix(in srgb, var(--fg) 70%, transparent);
+	      color: color-mix(in srgb, var(--fg) 72%, transparent);
+	      border-color: color-mix(in srgb, var(--fg) 35%, transparent);
 	    }
 	    .plan-mode-btn.plan-mode-label-btn.active {
 	      color: var(--accent);
-	      border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-	      background: color-mix(in srgb, var(--accent) 14%, transparent);
+	      border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+	      background: color-mix(in srgb, var(--accent) 16%, transparent);
+	      font-weight: 600;
+	    }
+	    .plan-mode-btn.plan-mode-label-btn.active .plan-mode-dot {
+	      background: #2fbf71;
+	      box-shadow: 0 0 0 3px rgba(47, 191, 113, 0.22);
 	    }
 	    @media (max-width: 768px) {
 	      .chat-input-right .plan-mode-btn.plan-mode-label-btn { display: none; }

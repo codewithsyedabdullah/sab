@@ -1865,11 +1865,12 @@ function initializeEventListeners() {
     if (statusToggle) {
       statusToggle.addEventListener('click', () => setPlanMode(false));
     }
-    const msgInput = el('message');
-    if (msgInput && !msgInput._sabPlanTabToggle) {
-      msgInput._sabPlanTabToggle = true;
-      msgInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Tab' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+    // Tab toggles Plan mode globally (no focus navigation).
+    if (!window._sabPlanCtrlTabBound) {
+      window._sabPlanCtrlTabBound = true;
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        if (e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
         e.preventDefault();
         e.stopPropagation();
         const st = loadToggleState();
