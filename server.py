@@ -332,6 +332,9 @@ def _auth_enabled() -> bool:
     forced_open = os.getenv("SAB_AUTH_OPEN", "").strip().lower()
     if forced_open in ("1", "true", "yes", "on"):
         return False
+    # Fresh installs work instantly with no login until an account exists.
+    if not _auth_configured():
+        return False
     return True
 
 
@@ -548,25 +551,46 @@ def _probe_endpoint_models(ep: dict):
                 raw = r.json().get("models", [])
                 models_list = [{"id": m.get("name") or m.get("model") or m, "name": m.get("name") or m} for m in raw]
             return (r.ok, models_list, "empty" if r.ok and not models_list else ("ok" if r.ok else "offline"), None)
-        # OpenAI-compatible
+        # OpenAI-compatible. A reachable host stays usable even when it can't
+        # serve a JSON model list (gateways like UnoRouter answer /models
+        # with 401/HTML/SPA pages). `online` now reflects reachability; the
+        # model list is just whatever could be discovered — possibly empty,
+        # in which case the app offers "type a model ID by hand".
         if base.endswith("/v1"):
             url = base + "/models"
         else:
             url = base + "/v1/models"
         r = _req.get(url, headers=headers, timeout=45)
         if r.ok:
-            data = r.json()
-            raw = data.get("data") or data.get("models") or []
-            if isinstance(raw, list):
-                for m in raw:
-                    if isinstance(m, str):
-                        models_list.append({"id": m, "name": m})
-                    elif isinstance(m, dict):
-                        mid = m.get("id")
-                        if mid:
-                            models_list.append({"id": mid, "name": m.get("name") or mid})
-        return (r.ok, models_list, "empty" if r.ok and not models_list else ("ok" if r.ok else "offline"), None)
+            online = True
+            data = None
+            try:
+                data = r.json()
+            except Exception:
+                data = None
+            if isinstance(data, dict):
+                raw = data.get("data") or data.get("models") or []
+                if isinstance(raw, list):
+                    for m in raw:
+                        if isinstance(m, str):
+                            models_list.append({"id": m, "name": m})
+                        elif isinstance(m, dict):
+                            mid = m.get("id")
+                            if mid:
+                                models_list.append({"id": mid, "name": m.get("name") or mid})
+            status = "ok" if models_list else "empty"
+            return (True, models_list, status, None)
+        # Host answered with a non-2xx (401/403/404…) — still reachable, so
+        # keep it online and usable; the real auth/rate-limiting error will
+        # surface at chat time when the user sends a message.
+        return (True, models_list, "reachable", f"HTTP {r.status_code} (no JSON model list)")
     except Exception as e:
+        msg = str(e).lower()
+        # Some gateways never answer the model-list route (they only serve
+        # chat). A timeout here must not hide the endpoint — stay reachable
+        # with zero models so the user can type an ID and chat anyway.
+        if not is_ollama and any(t in msg for t in ("timeout", "timed out", "time out", "read operation")):
+            return (True, [], "reachable", "model list timed out — chat may still work")
         return (False, models_list, "offline", str(e))
 
 

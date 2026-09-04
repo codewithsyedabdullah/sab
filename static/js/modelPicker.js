@@ -327,6 +327,21 @@ function _initModelPickerDropdown() {
     return sortModelObjects(result);
   }
 
+  // Cloud/API endpoints whose model list could not be auto-discovered (e.g.
+  // gateways like UnoRouter that answer /models with 401/HTML instead of a
+  // JSON list). They are still perfectly usable — the user just has to type
+  // a model ID. Ends the "offline + no models ⇒ unusable" trap.
+  function _zeroModelApiEndpoints() {
+    const items = (window.modelsModule && window.modelsModule.getCachedItems) ? window.modelsModule.getCachedItems() : [];
+    return items.filter(item => {
+      if (!item.category || item.category === 'local') return false;
+      const url = item.url || '';
+      if (!url || url.includes('11434')) return false;
+      const models = (item.models || []).concat(item.models_extra || []);
+      return models.length === 0;
+    });
+  }
+
   function _hasModelCache() {
     try {
       return !!(window.modelsModule && window.modelsModule.getCachedItems && (window.modelsModule.getCachedItems() || []).length);
@@ -433,16 +448,27 @@ function _initModelPickerDropdown() {
     const all = _getAllModels();
     const q = (filter || '').trim().toLowerCase();
     const hasAnyModel = all.length > 0;
+    const customEps = _zeroModelApiEndpoints();
+    const hasCustom = customEps.length > 0;
     listEl.classList.toggle('is-empty', !hasAnyModel);
-    menu.classList.toggle('no-models', !hasAnyModel);
+    menu.classList.toggle('no-models', !hasAnyModel && !hasCustom);
     if (search) {
-      search.placeholder = hasAnyModel ? 'Search models…' : 'No models connected';
+      search.placeholder = hasAnyModel ? 'Search models…' : (hasCustom ? 'Find an endpoint or type an ID…' : 'No models connected');
     }
     if (searchRow) {
       searchRow.classList.toggle('searching', !!q);
     }
 
-    if (!hasAnyModel) return; // collapsed empty list — nothing to render
+    // No discoverable models anywhere but endpoints exist that accept a
+    // typed model ID — render the manual section instead of a dead list.
+    if (!hasAnyModel && hasCustom) {
+      _addEmpty('No models discovered — type a model ID for your endpoint below');
+      _addCustomSection(customEps);
+      return;
+    }
+    // No discoverable models anywhere AND nothing to type an ID for —
+    // collapsed empty list.
+    if (!hasAnyModel) return;
 
     // Unique lookup so Recent/Favorites (stored as bare model IDs) can be
     // resolved back to full model objects; drops anything no longer offered.
@@ -541,6 +567,57 @@ function _initModelPickerDropdown() {
       listEl.appendChild(row);
     }
 
+    // One per zero-model API endpoint: pick the endpoint, type any model ID,
+    // hit Use. Bypasses auto-discovery entirely so random gateways work.
+    function _addCustomSection(eps) {
+      _addSection('Add a model by ID');
+      eps.forEach(ep => {
+        const box = document.createElement('div');
+        box.className = 'model-switch-item mp-custom-model';
+        box.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 8px;margin:2px 8px;border-radius:8px;background:var(--accent-soft, rgba(128,128,128,.08));cursor:default';
+        const label = document.createElement('span');
+        label.className = 'mp-model-name';
+        label.style.cssText = 'font-size:11px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32%;flex:none';
+        label.textContent = (ep.endpoint_name || '').split('/').pop() || 'endpoint';
+        label.title = ep.url;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Type a model ID, e.g. gpt-oss-120b:free';
+        input.style.cssText = 'flex:1;min-width:0;padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, currentColor);background:transparent;color:inherit;font-size:12px';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = 'Use';
+        btn.style.cssText = 'padding:6px 10px;border-radius:6px;border:0;cursor:pointer;font-size:12px;font-weight:600;background:var(--accent, var(--red, #e06c75));color:#fff;flex:none';
+        const go = () => {
+          const mid = (input.value || '').trim();
+          if (!mid) {
+            if (uiModule && uiModule.showToast) uiModule.showToast('Type a model ID first');
+            if (document.querySelector('#mp-custom-input-' + ep.endpoint_id)) {
+              const el = document.querySelector('#mp-custom-input-' + ep.endpoint_id);
+              el.style.borderColor = '#e06c75';
+              setTimeout(() => { if (el) el.style.borderColor = ''; }, 900);
+            }
+            return;
+          }
+          const m = {
+            mid,
+            display: mid.split('/').pop(),
+            url: ep.url,
+            endpointId: ep.endpoint_id,
+            epName: (ep.endpoint_name || '').split('/').pop(),
+            category: 'api',
+            providerText: [(ep.endpoint_name || ''), ep.url || ''].filter(Boolean).join(' '),
+          };
+          _pick(m);
+        };
+        btn.addEventListener('click', go);
+        input.id = 'mp-custom-input-' + ep.endpoint_id;
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+        box.append(label, input, btn);
+        listEl.appendChild(box);
+      });
+    }
+
     // ── Search mode: flat, filtered results across the whole catalog ──
     if (q) {
       const matches = all.filter(m => {
@@ -550,6 +627,7 @@ function _initModelPickerDropdown() {
       });
       if (matches.length === 0) _addEmpty('No matching models');
       else matches.forEach(_addRow);
+      if (hasCustom) _addCustomSection(customEps);
       return;
     }
 
@@ -639,6 +717,10 @@ function _initModelPickerDropdown() {
         }
       });
     }
+
+    // Always surface the manual section at the bottom so a zero-model
+    // endpoint stays usable even when the catalog has plenty of models.
+    if (hasCustom) _addCustomSection(customEps);
   }
 
 async function _pick(m) {
