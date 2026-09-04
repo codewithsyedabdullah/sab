@@ -35,7 +35,7 @@ import notesModule from './js/notes.js';
 import adminModule from './js/admin.js?v=20260716openrouter3';
 import settingsModule from './js/settings.js?v=20260815approvalsave1';
 // Eagerly bind unified minimize/restore behavior across all tool modals.
-import './js/modalManager.js?v=20260723compareicon2';
+import './js/modalManager.js?v=20260905chipdrag1';
 // Desktop window tiling — drag a modal near an edge/corner to snap.
 import './js/tileManager.js';
 import themeModule from './js/theme.js';
