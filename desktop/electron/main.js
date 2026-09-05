@@ -90,6 +90,44 @@ function logPath() {
   }
 }
 
+// Where all user data lives. Kept OUTSIDE the install dir (in Electron's
+// userData) so reinstalls, upgrades, and portable runs never wipe endpoints,
+// api keys, chats, or accounts. Overridable via SAB_DATA_DIR for power users.
+function dataDir() {
+  const override = (process.env.SAB_DATA_DIR || '').trim();
+  if (override) return override;
+  return app.getPath('userData');
+}
+
+// One-time migration: earlier builds kept data in <install>/sab-server/data.
+// Copy it into the persistent location on first launch so nobody loses their
+// existing endpoints/config when upgrading. The target dir already contains
+// Chromium cache folders as soon as Electron starts, so we gate migration on
+// whether the target already hosts REAL server data (a known server filename),
+// not on whether the directory is empty.
+function migrateLegacyData(root) {
+  const src = path.join(root, 'data');
+  const dst = dataDir();
+  const serverMarkers = ['model_endpoints.json', 'settings.json', 'auth.json', 'sessions.json', 'features.json'];
+  try {
+    fs.mkdirSync(dst, { recursive: true });
+    if (!fs.existsSync(src)) return;
+    if (serverMarkers.some((f) => fs.existsSync(path.join(dst, f)))) return;
+    fs.cpSync(src, dst, { recursive: true });
+    logPathWrite('migrated legacy data from ' + src + ' to ' + dst);
+  } catch (e) {
+    logPathWrite('legacy data migration skipped: ' + e.message);
+  }
+}
+
+function logPathWrite(line) {
+  try {
+    const log = logPath();
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    fs.appendFileSync(log, '\n[' + new Date().toISOString() + '] ' + line + '\n');
+  } catch (e) {}
+}
+
 function startServer() {
   const root = sabRoot();
   const serverFile = path.join(root, 'server.py');
@@ -98,14 +136,16 @@ function startServer() {
     app.quit();
     return;
   }
+  migrateLegacyData(root);
   const py = pythonPath();
   const log = logPath();
   fs.mkdirSync(path.dirname(log), { recursive: true });
   const logStream = fs.createWriteStream(log, { flags: 'a' });
-  logStream.write('\n[' + new Date().toISOString() + '] launching: ' + py + ' -u ' + serverFile + '\n');
+  logStream.write('\n[' + new Date().toISOString() + '] launching: ' + py + ' -u ' + serverFile + '  data=' + dataDir() + '\n');
   serverProc = spawn(py, ['-u', serverFile], {
     cwd: root,
     windowsHide: true,
+    env: Object.assign({}, process.env, { SAB_DATA_DIR: dataDir() }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   serverProc.stdout.on('data', (d) => logStream.write(d));

@@ -51,7 +51,10 @@ async def auth_middleware(request: Request, call_next):
 
 
 STATIC_DIR = Path(__file__).parent / "static"
-DATA_DIR = Path(__file__).parent / "data"
+# SAB_DATA_DIR lets the desktop shell host all user data (endpoints, api keys,
+# chats, memories, accounts) outside the install folder, so reinstalls/upgrades
+# and portable moves never lose data. Falls back to the in-place ./data dir.
+DATA_DIR = Path(os.environ.get("SAB_DATA_DIR") or (Path(__file__).parent / "data"))
 UPLOADS_DIR = DATA_DIR / "uploads"
 SESSIONS_FILE = DATA_DIR / "sessions.json"
 HISTORIES_DIR = DATA_DIR / "histories"
