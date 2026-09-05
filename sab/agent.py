@@ -45,10 +45,14 @@ class Agent:
         # tool_calls/name/arguments alongside role+content (see agent.dump_history).
         for h in history:
             role = h.get("role")
+            dead: set[str] = set()
             if role == "assistant" and h.get("tool_calls"):
                 calls = []
                 for tc in h["tool_calls"]:
                     fn = tc.get("function") or {}
+                    if not (fn.get("name") or "").strip():
+                        dead.add(str(tc.get("id") or ""))
+                        continue
                     arg = fn.get("arguments")
                     if isinstance(arg, str):
                         try:
@@ -58,7 +62,7 @@ class Agent:
                     calls.append({
                         "id": tc.get("id") or f"call_{len(calls)}",
                         "type": "function",
-                        "function": {"name": fn.get("name", ""), "arguments": json.dumps(arg)},
+                        "function": {"name": fn.get("name"), "arguments": json.dumps(arg)},
                     })
                 if calls:
                     self.messages.append({
@@ -68,6 +72,8 @@ class Agent:
                     })
                     continue
             if role == "tool":
+                if str(h.get("tool_call_id") or "") in dead:
+                    continue
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": h.get("tool_call_id") or "",
@@ -129,6 +135,8 @@ class Agent:
             response = self.llm.chat(self.messages, tools=tool_schemas or None)
 
             if response.get("tool_calls"):
+                response["tool_calls"] = [tc for tc in response["tool_calls"] if (tc.get("name") or "").strip()]
+            if response.get("tool_calls"):
                 self.messages.append({
                     "role": "assistant",
                     "content": response["content"] or "",
@@ -171,6 +179,8 @@ class Agent:
                 elif event["type"] == "tool_calls":
                     tool_calls = event["calls"]
 
+            if tool_calls:
+                tool_calls = [tc for tc in tool_calls if (tc.get("name") or "").strip()]
             if tool_calls:
                 self.messages.append({
                     "role": "assistant",

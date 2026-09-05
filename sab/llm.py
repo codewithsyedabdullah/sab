@@ -36,8 +36,44 @@ class LLM:
     # ------------------------------------------------------------------
     # OpenAI-compatible (v1/chat/completions)
     # ------------------------------------------------------------------
+    def _sanitize_openai_messages(self, messages) -> list[dict]:
+        """Drop nameless tool calls and orphaned tool-result messages so
+        strict providers (Gemini's OpenAI-compat shim) never receive an empty
+        function name — which 400s with INVALID_ARGUMENT. Also repairs legacy
+        sessions whose persisted assistant tool_calls were missing names."""
+        dead: set[str] = set()
+        out: list[dict] = []
+        for m in messages:
+            role = m.get("role")
+            if role == "assistant" and m.get("tool_calls"):
+                kept = []
+                for tc in m["tool_calls"]:
+                    fn = tc.get("function") or {}
+                    if not (fn.get("name") or "").strip():
+                        dead.add(str(tc.get("id") or ""))
+                        continue
+                    kept.append(tc)
+                m2 = dict(m)
+                if kept:
+                    m2["tool_calls"] = kept
+                else:
+                    m2.pop("tool_calls", None)
+                out.append(m2)
+                continue
+            if role == "tool":
+                tid = str(m.get("tool_call_id") or "")
+                if tid and tid in dead:
+                    continue
+                out.append(m)
+                continue
+            out.append(m)
+        return out
+
     def _openai_url(self) -> str:
-        base = self._api_base
+        base = self._api_base.rstrip("/")
+        # Gemini's OpenAI-compat surface already lives at .../v1beta/openai/chat/completions
+        if base.endswith("/v1beta/openai"):
+            return base + "/chat/completions"
         if base.endswith("/chat/completions"):
             return base
         if base.endswith("/v1") or base.endswith("/v1/"):
@@ -94,6 +130,7 @@ class LLM:
     def openai_chat(
         self, messages: list[dict[str, str]], tools: list[dict] | None = None
     ) -> dict[str, Any]:
+        messages = self._sanitize_openai_messages(messages)
         payload: dict[str, Any] = {"model": self._model, "messages": messages, "stream": False}
         if tools:
             payload["tools"] = tools
@@ -101,7 +138,19 @@ class LLM:
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
         resp = requests.post(self._openai_url(), json=payload, headers=headers, timeout=300)
-        self._raise_for(resp)
+        try:
+            self._raise_for(resp)
+        except RuntimeError as e:
+            # Some gateways only accept the key under X-Api-Key.
+            msg = str(e)
+            if self._api_key and ("401" in msg or "403" in msg) and (
+                "x-api-key" in msg.lower() or "api key" in msg.lower()
+            ):
+                headers = {"Content-Type": "application/json", "X-Api-Key": self._api_key}
+                resp = requests.post(self._openai_url(), json=payload, headers=headers, timeout=300)
+                self._raise_for(resp)
+            else:
+                raise
         data = resp.json()
         choices = (data.get("choices") or [{}])[0] or {}
         msg = choices.get("message") or {}
@@ -111,6 +160,8 @@ class LLM:
             calls = []
             for tc in tcs:
                 fn = tc.get("function") or {}
+                if not (fn.get("name") or "").strip():
+                    continue
                 args = fn.get("arguments", "{}")
                 if isinstance(args, str):
                     try:
@@ -128,6 +179,7 @@ class LLM:
     def openai_chat_stream(
         self, messages: list[dict[str, str]], tools: list[dict] | None = None
     ) -> Generator[dict[str, Any], None, None]:
+        messages = self._sanitize_openai_messages(messages)
         payload: dict[str, Any] = {"model": self._model, "messages": messages, "stream": True}
         if tools:
             payload["tools"] = tools
@@ -141,23 +193,40 @@ class LLM:
         try:
             self._raise_for(resp)
         except RuntimeError as e:
+            msg = str(e)
+            # Some gateways only accept the key under X-Api-Key.
+            if self._api_key and ("401" in msg or "403" in msg) and (
+                "x-api-key" in msg.lower() or "api key" in msg.lower()
+            ):
+                try:
+                    resp = requests.post(
+                        self._openai_url(),
+                        json=payload,
+                        headers={"Content-Type": "application/json", "X-Api-Key": self._api_key},
+                        stream=True, timeout=300,
+                    )
+                except requests.RequestException as e2:
+                    raise RuntimeError(f"LLM request failed: {e2}") from e2
+                self._raise_for(resp)
+                msg = str("")
             # Some gateways reject `stream: true` outright ("streaming is not
             # supported"). Retry once without streaming so those providers still
             # work. Narrowly scoped to bodies that say streaming is unavailable
             # so we never double-fire a request a provider already accepted.
-            msg = str(e).lower()
-            refuses_stream = any(w in msg for w in (
-                "not support", "unsupported", "not enabled", "disabled",
-                "not available", "cannot", "does not support", "stream is not",
-                "streaming is not", "no streaming", "doesn't support"))
-            if "stream" in msg and refuses_stream:
-                result = self.openai_chat(messages, tools)
-                if result.get("content"):
-                    yield {"type": "content", "text": result["content"]}
-                if result.get("tool_calls"):
-                    yield {"type": "tool_calls", "calls": result["tool_calls"]}
-                return
-            raise
+            if msg:
+                low = msg.lower()
+                refuses_stream = any(w in low for w in (
+                    "not support", "unsupported", "not enabled", "disabled",
+                    "not available", "cannot", "does not support", "stream is not",
+                    "streaming is not", "no streaming", "doesn't support"))
+                if "stream" in low and refuses_stream:
+                    result = self.openai_chat(messages, tools)
+                    if result.get("content"):
+                        yield {"type": "content", "text": result["content"]}
+                    if result.get("tool_calls"):
+                        yield {"type": "tool_calls", "calls": result["tool_calls"]}
+                    return
+                raise
 
         tool_acc: dict[int, dict] = {}
         for raw in resp.iter_lines():
@@ -216,6 +285,8 @@ class LLM:
             calls = []
             for idx in sorted(tool_acc.keys()):
                 entry = tool_acc[idx]
+                if not (entry["name"] or "").strip():
+                    continue
                 try:
                     entry["arguments"] = json.loads(entry["arguments"]) if entry["arguments"] else {}
                 except (json.JSONDecodeError, TypeError):
