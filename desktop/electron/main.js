@@ -4,9 +4,33 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-const PORT = process.env.SAB_PORT || 3000;
+const DEFAULT_PORT = 3000;
+const PORT = process.env.SAB_PORT ? parseInt(process.env.SAB_PORT, 10) : pickFreePort(DEFAULT_PORT);
 const HOST = 'http://localhost:' + PORT;
 const START_URL = HOST + '/';
+
+// Some machines have other software squatting on 3000 (dev servers, sensors,
+// other apps). Scan a small range so SAB still comes up instead of dying with
+// "port in use". The chosen port is handed to the server via SAB_PORT.
+function pickFreePort(start) {
+  if (isPortListening(start)) {
+    for (let p = start + 1; p <= start + 10; p++) {
+      if (!isPortListening(p)) return p;
+    }
+    return start + 11;
+  }
+  return start;
+}
+
+function isPortListening(port) {
+  if (process.platform !== 'win32') return false;
+  try {
+    const out = require('child_process').execFileSync('netstat', ['-ano', '-p', 'tcp'], { encoding: 'utf8', timeout: 4000, windowsHide: true });
+    return out.split(/\r?\n/).some((line) => line.includes(':' + port) && /LISTENING/i.test(line));
+  } catch (e) {
+    return false;
+  }
+}
 
 let serverProc = null;
 let mainWindow = null;
@@ -145,7 +169,7 @@ function startServer() {
   serverProc = spawn(py, ['-u', serverFile], {
     cwd: root,
     windowsHide: true,
-    env: Object.assign({}, process.env, { SAB_DATA_DIR: dataDir() }),
+    env: Object.assign({}, process.env, { SAB_DATA_DIR: dataDir(), SAB_PORT: String(PORT) }),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   serverProc.stdout.on('data', (d) => logStream.write(d));

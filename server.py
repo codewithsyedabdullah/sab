@@ -559,34 +559,52 @@ def _probe_endpoint_models(ep: dict):
         # with 401/HTML/SPA pages). `online` now reflects reachability; the
         # model list is just whatever could be discovered — possibly empty,
         # in which case the app offers "type a model ID by hand".
+        # Try the most likely models path first, then the alternate layout,
+        # so providers that only serve /models (or only /v1/models) still
+        # discover their model list.
+        paths = []
         if base.endswith("/v1"):
-            url = base + "/models"
+            paths = [base + "/models", base.rstrip("/v1") + "/v1/models"]
         else:
-            url = base + "/v1/models"
-        r = _req.get(url, headers=headers, timeout=45)
-        if r.ok:
+            paths = [base + "/v1/models", base + "/models"]
+        r = None
+        for i, url in enumerate(dict.fromkeys(paths)):
+            try:
+                r = _req.get(url, headers=headers, timeout=(45 if i == 0 else 15))
+                if r.ok:
+                    break
+            except Exception:
+                r = None
+                if i == 0:
+                    continue
+        if r is not None and r.ok:
             online = True
             data = None
             try:
                 data = r.json()
             except Exception:
                 data = None
-            if isinstance(data, dict):
+            if isinstance(data, list):
+                raw = data
+            elif isinstance(data, dict):
                 raw = data.get("data") or data.get("models") or []
-                if isinstance(raw, list):
-                    for m in raw:
-                        if isinstance(m, str):
-                            models_list.append({"id": m, "name": m})
-                        elif isinstance(m, dict):
-                            mid = m.get("id")
-                            if mid:
-                                models_list.append({"id": mid, "name": m.get("name") or mid})
+            else:
+                raw = []
+            if isinstance(raw, list):
+                for m in raw:
+                    if isinstance(m, str):
+                        models_list.append({"id": m, "name": m})
+                    elif isinstance(m, dict):
+                        mid = m.get("id")
+                        if mid:
+                            models_list.append({"id": mid, "name": m.get("name") or mid})
             status = "ok" if models_list else "empty"
             return (True, models_list, status, None)
         # Host answered with a non-2xx (401/403/404…) — still reachable, so
         # keep it online and usable; the real auth/rate-limiting error will
         # surface at chat time when the user sends a message.
-        return (True, models_list, "reachable", f"HTTP {r.status_code} (no JSON model list)")
+        code = r.status_code if r is not None else 0
+        return (True, models_list, "reachable", f"HTTP {code} (no JSON model list)" if r is not None else "no response from model-list route")
     except Exception as e:
         msg = str(e).lower()
         # Some gateways never answer the model-list route (they only serve
@@ -5372,4 +5390,4 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=3000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("SAB_PORT", os.environ.get("PORT", "3000"))), log_level="info")

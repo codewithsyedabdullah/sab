@@ -613,7 +613,23 @@ function _initModelPickerDropdown() {
         btn.addEventListener('click', go);
         input.id = 'mp-custom-input-' + ep.endpoint_id;
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-        box.append(label, input, btn);
+        const hint = document.createElement('div');
+        hint.style.cssText = 'grid-column:1/-1;font-size:10.5px;line-height:1.35;opacity:.7;color:var(--yellow, #e5c07b);';
+        const probeErr = String(ep.probe_error || '');
+        hint.textContent = probeErr && !probeErr.includes('timed out')
+          ? 'No model list from provider (' + probeErr + ') — type any model ID for this endpoint.'
+          : probeErr
+            ? 'Model list timed out — type any model ID for this endpoint.'
+            : 'Provider returned no model list — type any model ID for this endpoint.';
+        hint.title = ep.url;
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;';
+        row.append(label, input, btn);
+        input.onfocus = () => { input.style.flex = ''; };
+        wrap.append(row, hint);
+        box.append(wrap);
         listEl.appendChild(box);
       });
     }

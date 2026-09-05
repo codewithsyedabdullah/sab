@@ -38,8 +38,10 @@ class LLM:
     # ------------------------------------------------------------------
     def _openai_url(self) -> str:
         base = self._api_base
-        if base.endswith("/v1"):
-            return base + "/chat/completions"
+        if base.endswith("/chat/completions"):
+            return base
+        if base.endswith("/v1") or base.endswith("/v1/"):
+            return base.rstrip("/") + "/chat/completions"
         return base + "/v1/chat/completions"
 
     def _raise_for(self, resp) -> None:
@@ -101,9 +103,9 @@ class LLM:
         resp = requests.post(self._openai_url(), json=payload, headers=headers, timeout=300)
         self._raise_for(resp)
         data = resp.json()
-        choices = (data.get("choices") or [{}])[0]
+        choices = (data.get("choices") or [{}])[0] or {}
         msg = choices.get("message") or {}
-        result: dict[str, Any] = {"content": msg.get("content") or ""}
+        result: dict[str, Any] = {"content": msg.get("content") or data.get("content") or ""}
         tcs = msg.get("tool_calls") or []
         if tcs:
             calls = []
@@ -132,31 +134,73 @@ class LLM:
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
-        resp = requests.post(self._openai_url(), json=payload, headers=headers, stream=True, timeout=300)
-        self._raise_for(resp)
+        try:
+            resp = requests.post(self._openai_url(), json=payload, headers=headers, stream=True, timeout=300)
+        except requests.RequestException as e:
+            raise RuntimeError(f"LLM request failed: {e}") from e
+        try:
+            self._raise_for(resp)
+        except RuntimeError as e:
+            # Some gateways reject `stream: true` outright ("streaming is not
+            # supported"). Retry once without streaming so those providers still
+            # work. Narrowly scoped to bodies that say streaming is unavailable
+            # so we never double-fire a request a provider already accepted.
+            msg = str(e).lower()
+            refuses_stream = any(w in msg for w in (
+                "not support", "unsupported", "not enabled", "disabled",
+                "not available", "cannot", "does not support", "stream is not",
+                "streaming is not", "no streaming", "doesn't support"))
+            if "stream" in msg and refuses_stream:
+                result = self.openai_chat(messages, tools)
+                if result.get("content"):
+                    yield {"type": "content", "text": result["content"]}
+                if result.get("tool_calls"):
+                    yield {"type": "tool_calls", "calls": result["tool_calls"]}
+                return
+            raise
 
         tool_acc: dict[int, dict] = {}
         for raw in resp.iter_lines():
             if not raw:
                 continue
             line = raw.decode("utf-8", errors="replace").strip()
-            if not line.startswith("data:"):
+            if not line or line.startswith(":") or line.startswith("event:"):
                 continue
-            data = line[5:].strip()
-            if data == "[DONE]":
+            if line.startswith("data:"):
+                line = line[5:].strip()
+            if not line:
+                continue
+            if line == "[DONE]":
                 break
             try:
-                chunk = json.loads(data)
+                chunk = json.loads(line)
             except json.JSONDecodeError:
+                # Some lightweight gateways stream the bare text itself.
+                if line and len(line) < 4000:
+                    yield {"type": "content", "text": line + "\n"}
+                continue
+            if isinstance(chunk, dict) and chunk.get("error"):
+                err = chunk["error"]
+                yield {"type": "error", "message": err.get("message") if isinstance(err, dict) else str(err)}
+                return
+            if isinstance(chunk, list):
+                chunk = chunk[0] if chunk else {}
+            if not isinstance(chunk, dict):
+                continue
+            # Bare-content gateway style (no choices wrapper).
+            if "content" in chunk:
+                yield {"type": "content", "text": str(chunk.get("content", ""))}
                 continue
             choices = chunk.get("choices") or []
             if not choices:
                 continue
-            choice = choices[0]
-            delta = choice.get("delta") or {}
-            if delta.get("content"):
-                yield {"type": "content", "text": delta["content"]}
-            tcs = delta.get("tool_calls")
+            choice = choices[0] or {}
+            part = choice.get("delta") or choice.get("message") or {}
+            if part.get("content"):
+                yield {"type": "content", "text": part["content"]}
+            elif choice.get("text"):
+                yield {"type": "content", "text": choice["text"]}
+            tcs = part.get("tool_calls") or choice.get("tool_calls")
             if tcs:
                 for tc in tcs:
                     idx = tc.get("index", 0)
